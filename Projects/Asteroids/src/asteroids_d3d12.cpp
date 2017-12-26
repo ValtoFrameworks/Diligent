@@ -548,7 +548,7 @@ void Asteroids::CreateSubsets(UINT numHeapsPerFrame)
     for (UINT f = 0; f < NUM_FRAMES_TO_BUFFER; f++) {
         // Per-frame data
         auto frame = &mFrame[f];
-        auto dynamicUploadGPUVA = frame->mDynamicUpload->Heap()->GetGPUVirtualAddress();
+        //auto dynamicUploadGPUVA = frame->mDynamicUpload->Heap()->GetGPUVirtualAddress();
 
         for (UINT subsetIdx = 0; subsetIdx < mSubsetCount; ++subsetIdx) {
             void* memory = _aligned_malloc(sizeof(SubsetD3D12), 64);
@@ -597,7 +597,7 @@ void Asteroids::CreateMeshes()
 
     // Asteroid vertices
     {
-        memcpy(bufferWO + asteroidVBOffset, asteroidMeshes->vertices.data(), asteroidVBSize);
+        memcpy(bufferWO + static_cast<size_t>(asteroidVBOffset), asteroidMeshes->vertices.data(), static_cast<size_t>(asteroidVBSize));
 
         mAsteroidVertexBufferView.BufferLocation = gpuVA + asteroidVBOffset;
         mAsteroidVertexBufferView.SizeInBytes    = static_cast<UINT>(asteroidVBSize);
@@ -606,7 +606,7 @@ void Asteroids::CreateMeshes()
 
     // Asteroid indices
     {
-        memcpy(bufferWO + asteroidIBOffset, asteroidMeshes->indices.data(), asteroidIBSize);
+        memcpy(bufferWO + static_cast<size_t>(asteroidIBOffset), asteroidMeshes->indices.data(), static_cast<size_t>(asteroidIBSize));
 
         mAsteroidIndexBufferView.BufferLocation = gpuVA + asteroidIBOffset;
         mAsteroidIndexBufferView.SizeInBytes    = static_cast<UINT>(asteroidIBSize);
@@ -615,7 +615,7 @@ void Asteroids::CreateMeshes()
     
     // Skybox vertices
     {
-        memcpy(bufferWO + skyboxVBOffset, skyboxVertices.data(), skyboxVBSize);
+        memcpy(bufferWO + static_cast<size_t>(skyboxVBOffset), skyboxVertices.data(), static_cast<size_t>(skyboxVBSize));
 
         mSkyboxVertexBufferView.BufferLocation = gpuVA + skyboxVBOffset;
         mSkyboxVertexBufferView.SizeInBytes    = static_cast<UINT>(skyboxVBSize);
@@ -793,7 +793,6 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
     }
     else
     {
-        LONG64 SubsetUpdateTicks = 0, SubsetRenderTicks = 0;
         for (unsigned int subsetIdx = 0; subsetIdx < mSubsetCount; ++subsetIdx) {
             RenderSubset(swapChainBuffer->mRenderTargetView, mCurrentFrameIndex, frameTime,
                 frame->mSubsets[subsetIdx], subsetIdx, camera.Eye(), camera.ViewProjection(), settings);

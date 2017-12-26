@@ -10,27 +10,134 @@ as a graphics subsystem in a standalone game engine, Unity native plugin or any 
 [shader source code converter](http://diligentgraphics.com/diligent-engine/shader-converter/) that allows shaders authored in HLSL to 
 be translated to GLSL.
 
-# Repository Structure
+## Supported Plaforms and Low-Level Graphics APIs
 
-The repository includes the following submodules:
+| Platform                   | APIs                                |
+| -------------------------- | ----------------------------------- |
+| Win32 (Windows desktop)    | Direct3D11, Direct3D12, OpenGL4.2+  |
+| Universal Windows Platform | Direct3D11, Direct3D12              |
+| Android                    | OpenGLES3.0+                        |
+| Linux                      | OpenGL4.2+                          |
 
-* [Core](https://github.com/DiligentGraphics/DiligentCore) submodule provides basic engine functionality. It implements the engine API using 
-  [Direct3D11](https://github.com/DiligentGraphics/DiligentCore/tree/master/Graphics/GraphicsEngineD3D11), [Direct3D12](https://github.com/DiligentGraphics/DiligentCore/tree/master/Graphics/GraphicsEngineD3D12), and
-  [OpenGL/GLES](https://github.com/DiligentGraphics/DiligentCore/tree/master/Graphics/GraphicsEngineOpenGL). It also implements 
-  [HLSL to GLSL source code converter](https://github.com/DiligentGraphics/DiligentCore/tree/master/Graphics/HLSL2GLSLConverterLib)
-* [Samples](https://github.com/DiligentGraphics/DiligentSamples) submodule contains several simple graphics applications intended to demonstrate the usage of 
-  the Diligent Engine API.
-* [Tools](https://github.com/DiligentGraphics/DiligentTools) submodule contains [texture loading library](https://github.com/DiligentGraphics/DiligentTools/tree/master/TextureLoader) and 
-  [Render Script](https://github.com/DiligentGraphics/DiligentTools/tree/master/RenderScript), a Lua-based run-time graphics resource managing system.
+## Build Status
+
+| Platform                   | Status        |
+| -------------------------- | ------------- |
+| Win32/Universal Windows    | [![Build Status](https://ci.appveyor.com/api/projects/status/github/DiligentGraphics/DiligentEngine?svg=true)](https://ci.appveyor.com/project/DiligentGraphics/diligentengine) |
+| Linux                      | [![Build Status](https://travis-ci.org/DiligentGraphics/DiligentEngine.svg?branch=master)](https://travis-ci.org/DiligentGraphics/DiligentEngine)      |
+
+
+Last Stable Release - [v2.1.a](https://github.com/DiligentGraphics/DiligentEngine/tree/v2.1.a)
+
+# Clonning the Repository
+
+This is the master repository that contains three [submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules). To get the repository and all submodules, use the following command:
+
+ git clone --recursive https://github.com/DiligentGraphics/DiligentEngine.git 
+ 
+ Alternatively, you can get master repository fisrt, and then individually clone all submodules into the engine's root folder.
+
+## Repository Structure
+
+Master repository includes the following submodules:
+
+* [Core](https://github.com/DiligentGraphics/DiligentCore) submodule provides basic engine functionality. 
+  It implements the engine API using 
+  [Direct3D11](https://github.com/DiligentGraphics/DiligentCore/tree/master/Graphics/GraphicsEngineD3D11), 
+  [Direct3D12](https://github.com/DiligentGraphics/DiligentCore/tree/master/Graphics/GraphicsEngineD3D12), and
+  [OpenGL/GLES](https://github.com/DiligentGraphics/DiligentCore/tree/master/Graphics/GraphicsEngineOpenGL). 
+  It also implements 
+  [HLSL to GLSL source code converter](https://github.com/DiligentGraphics/DiligentCore/tree/master/Graphics/HLSL2GLSLConverterLib).
+  The module is self-contained and can be built by its own.
+* [Tools](https://github.com/DiligentGraphics/DiligentTools) submodule contains 
+  [texture loading library](https://github.com/DiligentGraphics/DiligentTools/tree/master/TextureLoader) and 
+  [Render Script](https://github.com/DiligentGraphics/DiligentTools/tree/master/RenderScript), a Lua-based run-time 
+  graphics resource managing system. Tools module depends on Core module.
+* [Samples](https://github.com/DiligentGraphics/DiligentSamples) submodule contains several simple graphics applications 
+  intended to demonstrate the usage of the Diligent Engine API. The module depends on Core and Tools modules.
+  
 
 # Build Instructions
 
+Diligent Engine uses [CMake](https://cmake.org/) as a cross-platform build tool. 
+To start using cmake, download the [latest release](https://cmake.org/download/) (3.10 or later is required for Windows build).
+
 ## Win32
 
-To build the engine for Win32 platform, [Microsoft Visual Studio 2015](https://www.visualstudio.com/vs/community) or later is required. 
-Any edition including Visual Studio Community is sufficient. Open [EngineAll.sln](build/Win32/EngineAll.sln) solution file located in 
-[build/Win32](build/Win32) folder, choose the desired configuration and build it. Note that ARM platform is intended 
-to build the engine for Android (see below).
+To generate build files for Windows desktop platform, use either CMake GUI or command line tool. For example, to generate 
+[Visual Studio 2017](https://www.visualstudio.com/vs/community) 64-bit solution and project files in *cmk_build/Win64* folder, 
+navigate to the engine's root folder and run the following command:
+
+*cmake -H. -B./cmk_build/Win64 -G "Visual Studio 15 2017 Win64"*
+
+**WARNING!** In current implementation, full path to cmake build folder **must not contain white spaces**. (If anybody knows a way
+to add quotes to CMake's custom commands, please let me know!)
+
+Open DiligentEngine.sln file in cmk_build folder, select the desired configuration and build the engine. By default, Asteroids
+demo will be set up as startup project.
+
+
+## Universal Windows Platform
+
+To generate build files for Universal Windows platform, you need to define the following two cmake variables:
+
+* CMAKE_SYSTEM_NAME=WindowsStore 
+* CMAKE_SYSTEM_VERSION=< Windows SDK Version >
+
+For example, to generate Visual Studio 2017 64-bit solution and project files in *cmk_build/UWP64* folder, run the following command
+from the engine's root folder:
+
+*cmake -D CMAKE_SYSTEM_NAME=WindowsStore -D CMAKE_SYSTEM_VERSION=10.0.15063.0 -H. -B./cmk_build/UWP64 -G "Visual Studio 15 2017 Win64"*
+
+## Linux
+
+Your Linux environment needs to be set up for c++ development. To configure my fresh Ubuntu 17.10, I installed the following packages:
+
+1. gcc, make and other essential c/c++ tools:
+
+* sudo apt-get update
+* sudo apt-get upgrade
+* sudo apt-get install build-essential
+
+2. cmake
+
+* sudo apt-get install cmake
+
+3. Other required packages:
+
+* sudo apt-get install libx11-dev
+* sudo apt-get install mesa-common-dev
+* sudo apt-get install mesa-utils
+* sudo apt-get install libgl-dev
+
+To generate make files for debug configuration, run the following CMake command from the engine's root folder:
+
+*cmake -H. -B./cmk_build/Linux64 -G "Unix Makefiles" -DCMAKE_BUILD_TYPE="Debug"* 
+
+To build the engine, run the following command:
+
+*cmake --build ./cmk_build/Linux64*
+
+
+## Android
+
+Please make sure that your machine is set up for Android development. Download 
+[Android Studio](https://developer.android.com/studio/index.html), [Android NDK](https://developer.android.com/ndk/downloads/index.html) and
+other required tools. To verify that your environment is properly set up, try building 
+[teapots sample](https://github.com/googlesamples/android-ndk/tree/master/teapots).
+
+Open *DiligentSamples/Android* or *UnityPlugin/Android* folders with Android Studio to build and run
+the engine samples and Unity emulator on Android.
+
+## Legacy Build (Deprecated)
+
+There is a build subdirectory in each project’s directory that contains Visual Studio 2015 project files.
+These files are now deprecated and will be removed in future releases.
+
+### Win32
+
+Open [EngineAll.sln](build/Win32/EngineAll.sln) solution file located in [build/Win32](build/Win32) folder, choose the 
+desired configuration and build it.
 
 ### Build Details
 
@@ -43,36 +150,11 @@ the same parent directory, otherwise links in the project files will be broken.
 Core module contains several property pages that define common build settings. The pages are located in 
 diligentcore\Shared\Build subdirectory and are referenced by every project.
 
-There is a build subdirectory in each project’s directory that contains Visual Studio project files.
-
-GraphicsEngineD3D11, GraphicsEngineD3D12 and GraphicsEngineOpenGL projects can be built as either static or dynamic link library.
-
 ## Universal Windows Platform
 
-As with the Windows Desktop, Microsoft Visual Studio 2015 or later is required to build the engine for Universal Windows 
-Platform platform. Again, any edition including Visual Studio Community is sufficient. Navigate to [build/UWP](build/UWP) 
-directory, open [EngineAll.sln](build/UWP/EngineAll.sln) solution file and build the solution for the desired configuration.
+Navigate to [build/UWP](build/UWP) directory, open [EngineAll.sln](build/UWP/EngineAll.sln) solution file and build 
+the solution for the desired configuration.
 
-# Android
-
-To build the engine for Android, you first need to set up your machine for Android development: 
-download Android SDK (Android Studio is not required), Android NDK, Apache Ant and other required tools. 
-
-There are two ways to build the engine for Android.
-The first way is to download and install [Visual GDB](http://visualgdb.com/) plugin for Visual Studio, open Windows Desktop solution 
-(located in [build/Win32](build/Win32]) folder), select ARM platform and build the solution as usual. Note that despite 
-the name, you can build the application for both ARM and x86 Android platforms. You can then deploy and run your Android 
-application directly from the IDE
-
-It is important to rebuild the app project for the first time
-
-To run the app from Visual Studio, go to Project Settings->Debugging and select Local Windows Debugger option in the 
-Debugger to launch drop-down list. Then start the application
-
-The second way to build for Android is to navigate to the build/Win32 folder of the project you want to build in command line and 
-use ndk-build. For executable projects, there is also **android_build.bat** file that builds and runs the application on the device
-
-Note that when building for Android, the engine root path must not contain white spaces.
 
 # Samples
 
@@ -113,6 +195,11 @@ and adds implementation using Diligent Engine API to allow comparing performance
 
 
 # Version History
+
+## v2.1.a
+
+* Refactored build system to use CMake and Gradle for Android
+* Added support for Linux platform
 
 ## v2.1
 
