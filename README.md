@@ -27,7 +27,7 @@ be translated to GLSL.
 | Linux                      | [![Build Status](https://travis-ci.org/DiligentGraphics/DiligentEngine.svg?branch=master)](https://travis-ci.org/DiligentGraphics/DiligentEngine)      |
 
 
-Last Stable Release - [v2.1.a](https://github.com/DiligentGraphics/DiligentEngine/tree/v2.1.a)
+Last Stable Release - [v2.1.b](https://github.com/DiligentGraphics/DiligentEngine/tree/v2.1.b)
 
 # Clonning the Repository
 
@@ -36,6 +36,13 @@ This is the master repository that contains three [submodules](https://git-scm.c
  git clone --recursive https://github.com/DiligentGraphics/DiligentEngine.git 
  
  Alternatively, you can get master repository fisrt, and then individually clone all submodules into the engine's root folder.
+ 
+ To checkout the last stable release, run the following commands:
+ 
+* git checkout tags/v2.1.b
+
+* git submodule update --init --recursive
+
 
 ## Repository Structure
 
@@ -129,31 +136,61 @@ other required tools. To verify that your environment is properly set up, try bu
 Open *DiligentSamples/Android* or *UnityPlugin/Android* folders with Android Studio to build and run
 the engine samples and Unity emulator on Android.
 
-## Legacy Build (Deprecated)
+# Tutorials
 
-There is a build subdirectory in each project’s directory that contains Visual Studio 2015 project files.
-These files are now deprecated and will be removed in future releases.
+## [Tutorial 01 - Hello Triangle](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial01_HelloTriangle)
 
-### Win32
+![](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial01_HelloTriangle/Screenshot.png)
 
-Open [EngineAll.sln](build/Win32/EngineAll.sln) solution file located in [build/Win32](build/Win32) folder, choose the 
-desired configuration and build it.
+This tutorial shows how to render a simple triangle using Diligent Engine API.
 
-### Build Details
+## [Tutorial 02 - Cube](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial02_Cube)
 
-Diligent engine is self-contained and does not have any external dependencies. Installing Visual Studio is all that is 
-required to build the engine.
+![](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial02_Cube/Screenshot.png)
 
-Tools module references core module and samples module references both core and tools modules. The modules must share 
-the same parent directory, otherwise links in the project files will be broken.
+This tutorial demonstrates how to render an actual 3D object, a cube. It shows how to load shaders from files, create and use vertex, 
+index and uniform buffers.
 
-Core module contains several property pages that define common build settings. The pages are located in 
-diligentcore\Shared\Build subdirectory and are referenced by every project.
+## [Tutorial 03 - Texturing](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial03_Texturing)
 
-## Universal Windows Platform
+![](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial03_Texturing/Screenshot.png)
 
-Navigate to [build/UWP](build/UWP) directory, open [EngineAll.sln](build/UWP/EngineAll.sln) solution file and build 
-the solution for the desired configuration.
+This tutorial demonstrates how to apply a texture to a 3D object. It shows how to load a texture from file, create shader resource
+binding object and how to sample a texture in the shader.
+
+## [Tutorial 04 - Instancing](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial04_Instancing)
+
+![](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial04_Instancing/Screenshot.png)
+
+This tutorial demonstrates how to use instancing to render multiple copies of one object
+using unique transformation matrix for every copy.
+
+## [Tutorial 05 - Texture Array](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial05_TextureArray)
+
+![](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial05_TextureArray/Screenshot.png)
+
+This tutorial demonstrates how to combine instancing with texture arrays to 
+use unique texture for every instance.
+
+## [Tutorial 06 - Multithreading](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial06_Multithreading)
+
+![](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial06_Multithreading/Screenshot.png)
+
+This tutorial shows how to generate command lists in parallel from multiple threads.
+
+## [Tutorial 07 - Geometry Shader](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial07_GeometryShader)
+
+![](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial07_GeometryShader/Screenshot.png)
+
+This tutorial shows how to use geometry shader to render smooth wireframe.
+
+
+## [Tutorial 08 - Tessellation](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial08_Tessellation)
+
+![](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial08_Tessellation/Screenshot.png)
+
+This tutorial shows how to use hardware tessellation to implement simple adaptive terrain 
+rendering algorithm.
 
 
 # Samples
@@ -193,8 +230,24 @@ and adds implementation using Diligent Engine API to allow comparing performance
 
 ![](unityplugin/GhostCubePlugin/Screenshot.png)
 
+# References
+
+[Diligent Engine on the Web](http://diligentgraphics.com)
+
+[Diligent Engine on Twitter](https://twitter.com/diligentengine)
+
+[Diligent Engine on Facebook](https://www.facebook.com/DiligentGraphics/)
+
+[API Reference][1]
+
 
 # Version History
+
+## v2.1.b
+
+* Removed legacy Visual Studio solution and project files
+* Added API reference
+* Added tutorials 1-8
 
 ## v2.1.a
 
@@ -248,6 +301,8 @@ Initial release
 
 Licensed under the [Apache License, Version 2.0](License.txt)
 
-**Copyright 2015-2017 Egor Yusov**
+**Copyright 2015-2018 Egor Yusov**
 
-[Diligent Graphics](http://diligentgraphics.com)
+[diligentgraphics.com](http://diligentgraphics.com)
+
+[1]: https://cdn.rawgit.com/DiligentGraphics/DiligentCore/4949ec8a/doc/html/index.html

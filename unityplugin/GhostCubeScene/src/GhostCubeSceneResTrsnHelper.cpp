@@ -1,4 +1,4 @@
-/*     Copyright 2015-2017 Egor Yusov
+/*     Copyright 2015-2018 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ void GhostCubeSceneResTrsnHelper::TransitionResources(int stateCount, UnityGraph
             pResToTransition = pMirrorDepth;
         else
         {
-            UNEXPECTED("Unexpected resource to transition")
+            UNEXPECTED("Unexpected resource to transition");
         }
         if (pResToTransition)
         {

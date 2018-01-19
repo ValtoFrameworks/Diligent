@@ -1,4 +1,4 @@
-/*     Copyright 2015-2017 Egor Yusov
+/*     Copyright 2015-2018 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -150,7 +150,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int cmdShow)
         }
         else
         {
-            LOG_ERROR("Unknown device type. Only the following types are supported: D3D11, D3D12, GL")
+            LOG_ERROR("Unknown device type. Only the following types are supported: D3D11, D3D12, GL");
             return -1;
         }
     }
