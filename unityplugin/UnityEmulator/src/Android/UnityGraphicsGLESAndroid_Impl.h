@@ -54,12 +54,15 @@ public:
             return 0;
     }
     EGLContext GetContext() { return context_; }
+    GLuint GetDefaultFBO()const{return 0;}
 
     bool Invalidate();
 
     void Suspend();
     EGLint Resume( ANativeWindow* window );
 
+    void UpdateScreenSize();
+    
 private:
     //EGL configurations
     ANativeWindow* window_ = nullptr;

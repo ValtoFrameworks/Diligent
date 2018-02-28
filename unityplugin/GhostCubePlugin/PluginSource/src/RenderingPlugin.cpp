@@ -57,7 +57,7 @@ static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType ev
 
 extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
 {
-#if (defined(PLATFORM_WIN32) || defined(PLATFORM_UNIVERSAL_WINDOWS)) && (defined(_DEBUG) || defined(DEBUG))
+#if (PLATFORM_WIN32 || PLATFORM_UNIVERSAL_WINDOWS) && (defined(_DEBUG) || defined(DEBUG))
     _CrtSetDbgFlag( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
 #endif
 
@@ -72,6 +72,8 @@ extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnit
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
 {
 	s_Graphics->UnregisterDeviceEventCallback(OnGraphicsDeviceEvent);
+    s_Graphics = nullptr;
+    s_UnityInterfaces = nullptr;
 }
 
 #if UNITY_WEBGL
@@ -164,6 +166,8 @@ static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType ev
             s_CurrentAPI.reset();
         }
 		s_DeviceType = kUnityGfxRendererNull;
+        g_RenderTargetHandle = nullptr;
+        g_DepthBufferHandle = nullptr;
 	}
     else if (s_CurrentAPI)
 	{

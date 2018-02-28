@@ -11,20 +11,19 @@ std::unique_ptr<UnityGraphicsGL_Impl> UnityGraphicsGLCoreES_Emulator::m_Graphics
 
 UnityGraphicsGLCoreES_Emulator::UnityGraphicsGLCoreES_Emulator()
 {
-    VERIFY(!m_GraphicsImpl, "Another emulator has already been initialized");
-    m_GraphicsImpl.reset( new UnityGraphicsGL_Impl );
     //GeUnityInterfaces().RegisterInterface(IUnityGraphicsGLCoreES__GUID, GetUnityGraphicsAPIInterface());
 }
 
 void UnityGraphicsGLCoreES_Emulator::InitGLContext(void *pNativeWndHandle, 
-                                                   #ifdef PLATFORM_LINUX
+                                                   #if PLATFORM_LINUX
                                                        void *pDisplay,
                                                    #endif
-
-int MajorVersion, int MinorVersion)
+                                                   int MajorVersion, int MinorVersion)
 {
-    m_GraphicsImpl->InitGLContext(pNativeWndHandle, 
-                                  #ifdef PLATFORM_LINUX
+    VERIFY(!m_GraphicsImpl, "Another emulator has already been initialized");
+    m_GraphicsImpl.reset( new UnityGraphicsGL_Impl );
+    m_GraphicsImpl->InitGLContext(pNativeWndHandle,
+                                  #if PLATFORM_LINUX
                                      pDisplay,
                                   #endif
                                   MajorVersion, MinorVersion);
@@ -48,7 +47,17 @@ void UnityGraphicsGLCoreES_Emulator::Release()
 
 void UnityGraphicsGLCoreES_Emulator::ResizeSwapChain(unsigned int Width, unsigned int Height)
 {
+#if PLATFORM_ANDROID
+    m_GraphicsImpl->UpdateScreenSize();
+    GetBackBufferSize(Width, Height);
+#endif
     m_GraphicsImpl->ResizeSwapchain(Width, Height);
+}
+
+void UnityGraphicsGLCoreES_Emulator::GetBackBufferSize(unsigned int &Width, unsigned int &Height)
+{
+    Width = m_GraphicsImpl->GetBackBufferWidth();
+    Height = m_GraphicsImpl->GetBackBufferHeight();
 }
 
 bool UnityGraphicsGLCoreES_Emulator::SwapChainInitialized()
@@ -74,8 +83,8 @@ UnityGfxRenderer UnityGraphicsGLCoreES_Emulator::GetUnityGfxRenderer()
 
 void UnityGraphicsGLCoreES_Emulator::BeginFrame()
 {
-    glBindFramebuffer( GL_DRAW_FRAMEBUFFER, 0 );
-    glBindFramebuffer( GL_READ_FRAMEBUFFER, 0 );
+    glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_GraphicsImpl->GetDefaultFBO() );
+    glBindFramebuffer( GL_READ_FRAMEBUFFER, m_GraphicsImpl->GetDefaultFBO() );
     glClearDepthf( UsesReverseZ() ? 0.f : 1.f );
     static const float ClearColor[4] = { 0, 0, 0.5f, 1 };
     glClearColor(ClearColor[0], ClearColor[1], ClearColor[2], ClearColor[3]);

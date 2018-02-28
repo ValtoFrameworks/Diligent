@@ -6,7 +6,7 @@
 class UnityGraphicsD3D12Impl;
 class IResourceStateTransitionHandler;
 
-class UnityGraphicsD3D12Emulator : public UnityGraphicsEmulator
+class UnityGraphicsD3D12Emulator final : public UnityGraphicsEmulator
 {
 public:
     static UnityGraphicsD3D12Emulator& GetInstance();
@@ -25,6 +25,8 @@ public:
     virtual UnityGfxRenderer GetUnityGfxRenderer()override final;
     virtual bool SwapChainInitialized()override final;
     void* GetD3D12Device();
+    void* GetDXGISwapChain();
+    virtual void GetBackBufferSize(unsigned int &Width, unsigned int &Height)override final;
 
 private:
     UnityGraphicsD3D12Emulator();

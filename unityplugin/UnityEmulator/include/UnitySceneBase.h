@@ -48,11 +48,12 @@ public:
         m_WindowHeight = NewHeight;
     }
 
-    virtual const char* GetSceneName() = 0;
+    virtual const char* GetSceneName()const = 0;
 
-    virtual const char* GetPluginName() = 0;
+    virtual const char* GetPluginName()const = 0;
 
-    virtual void Render(UnityRenderingEvent RenderEventFunc, double CurrTime, double ElapsedTime) = 0;
+    virtual void Update(double CurrTime, double ElapsedTime) = 0;
+    virtual void Render(UnityRenderingEvent RenderEventFunc) = 0;
 
     void SetDiligentGraphicsAdapter(DiligentGraphicsAdapter *DiligentGraphics)
     {

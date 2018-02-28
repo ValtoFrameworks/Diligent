@@ -1,8 +1,8 @@
 #pragma once
 
-#if defined(PLATFORM_WIN32)
+#if PLATFORM_WIN32
     #include <d3d11.h>
-#elif defined(PLATFORM_UNIVERSAL_WINDOWS)
+#elif PLATFORM_UNIVERSAL_WINDOWS
     #include <d3d11_2.h>
 #endif
 
@@ -22,6 +22,7 @@ public:
 
 
     ID3D11Device* GetD3D11Device() { return m_d3d11Device; }
+    IDXGISwapChain* GetDXGISwapChain() { return m_SwapChain; }
     ID3D11DeviceContext* GetD3D11Context() { return m_d3d11Context; }
     ID3D11RenderTargetView* GetRTV() { return m_BackBufferRTV; }
     ID3D11DepthStencilView* GetDSV() { return m_DepthBufferDSV; }

@@ -49,7 +49,7 @@ void RenderAPI_OpenGLCoreES::ProcessDeviceEvent(UnityGfxDeviceEventType type, IU
     if (type == kUnityGfxDeviceEventInitialize)
     {
         auto *pFactoryGL = GetEngineFactoryOpenGL();
-        EngineCreationAttribs Attribs;
+        EngineGLAttribs Attribs;
         pFactoryGL->AttachToActiveGLContext(Attribs, &m_Device, &m_Context);
         if (m_Context)
         {
@@ -76,6 +76,13 @@ void RenderAPI_OpenGLCoreES::CreateRenderTargetAndDepthBuffer()
     RenderTargetDesc.BindFlags = BIND_RENDER_TARGET;
     RenderTargetDesc.Usage = USAGE_DEFAULT;
     RenderTargetDesc.Name = "Unity render target";
+    RenderTargetDesc.MipLevels = 1;
+#if PLATFORM_IOS
+    // Texture parameter queries are not supported in GLES3.0
+    RenderTargetDesc.Width = 1024;
+    RenderTargetDesc.Height = 1024;
+    RenderTargetDesc.Format = TEX_FORMAT_RGBA8_UNORM_SRGB;
+#endif
     pDeviceGL->CreateTextureFromGLHandle(m_GLRenderTargetHandle, RenderTargetDesc, &pRenderTarget);
         
     RefCntAutoPtr<ITexture> pDepthBuffer;
@@ -84,6 +91,13 @@ void RenderAPI_OpenGLCoreES::CreateRenderTargetAndDepthBuffer()
     DepthBufferDesc.BindFlags = BIND_DEPTH_STENCIL;
     DepthBufferDesc.Usage = USAGE_DEFAULT;
     DepthBufferDesc.Name = "Unity depth buffer";
+    DepthBufferDesc.MipLevels = 1;
+#if PLATFORM_IOS
+    // Texture parameter queries are not supported in GLES3.0
+    DepthBufferDesc.Width = 1024;
+    DepthBufferDesc.Height = 1024;
+    DepthBufferDesc.Format = TEX_FORMAT_D32_FLOAT;
+#endif
     pDeviceGL->CreateTextureFromGLHandle(m_GLDepthTextureHandle, DepthBufferDesc, &pDepthBuffer);
 
     CreateTextureViews(pRenderTarget, pDepthBuffer);

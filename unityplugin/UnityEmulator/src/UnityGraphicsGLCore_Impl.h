@@ -4,7 +4,7 @@
 
 #if OPENGL_SUPPORTED
 
-#if defined(PLATFORM_WIN32)
+#if PLATFORM_WIN32
 
 #   ifndef GLEW_STATIC
 #       define GLEW_STATIC
@@ -14,7 +14,7 @@
 #   include "GL/wglew.h"
 #   include <GL/GL.h>
 
-#elif defined(PLATFORM_LINUX)
+#elif PLATFORM_LINUX
 
 #   ifndef GLEW_STATIC
 #       define GLEW_STATIC // Must be defined to use static version of glew
@@ -43,6 +43,17 @@
 #       undef Success
 #   endif
 
+#elif PLATFORM_MACOS
+
+#   ifndef GLEW_STATIC
+#       define GLEW_STATIC // Must be defined to use static version of glew
+#   endif
+#   ifndef GLEW_NO_GLU
+#       define GLEW_NO_GLU
+#   endif
+
+#   include "GL/glew.h"
+
 #else
 
 #   error Unsupported platform
@@ -53,18 +64,20 @@ class UnityGraphicsGLCore_Impl
 {
 public:
 
-#if defined(PLATFORM_WIN32)
+#if PLATFORM_WIN32
     typedef HGLRC NativeGLContextType;
-#elif defined(PLATFORM_LINUX)
+#elif PLATFORM_LINUX
     typedef GLXContext NativeGLContextType;
+#elif PLATFORM_MACOS
+    typedef void* NativeGLContextType;
 #else
 #   error Unsupported platform
-#endif    
+#endif
 
     ~UnityGraphicsGLCore_Impl();
 
     void InitGLContext(void *pNativeWndHandle, 
-                       #ifdef PLATFORM_LINUX
+                       #if PLATFORM_LINUX
                            void *pDisplay,
                        #endif
                        int MajorVersion, int MinorVersion);
@@ -78,16 +91,19 @@ public:
     GLenum GetBackBufferFormat()const { return GL_RGBA8; }
     GLenum GetDepthBufferFormat()const { return GL_DEPTH_COMPONENT32F; }
     NativeGLContextType GetContext() { return m_Context; }
+    GLuint GetDefaultFBO()const{return 0;}
 
 private:
     int m_BackBufferWidth = 0;
     int m_BackBufferHeight = 0;
 
-#if defined(PLATFORM_WIN32)
+#if PLATFORM_WIN32
     HDC m_WindowHandleToDeviceContext;
-#elif defined(PLATFORM_LINUX)
+#elif PLATFORM_LINUX
     Window m_LinuxWindow;
     Display *m_Display;
+#elif PLATFORM_MACOS
+    
 #else
 #   error Unsupported platform
 #endif

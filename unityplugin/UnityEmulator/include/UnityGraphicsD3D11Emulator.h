@@ -4,7 +4,7 @@
 #include "UnityGraphicsEmulator.h"
 
 class UnityGraphicsD3D11Impl;
-class UnityGraphicsD3D11Emulator : public UnityGraphicsEmulator
+class UnityGraphicsD3D11Emulator final : public UnityGraphicsEmulator
 {
 public:
     static UnityGraphicsD3D11Emulator& GetInstance();
@@ -22,6 +22,8 @@ public:
     virtual UnityGfxRenderer GetUnityGfxRenderer()override final;
     virtual bool SwapChainInitialized()override final;
     void* GetD3D11Device();
+    void* GetDXGISwapChain();
+    virtual void GetBackBufferSize(unsigned int &Width, unsigned int &Height)override final;
 
 private:
     UnityGraphicsD3D11Emulator();
