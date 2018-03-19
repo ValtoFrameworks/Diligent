@@ -7,8 +7,8 @@ for older platforms via Direct3D11, OpenGL and OpenGLES. Diligent Engine exposes
 provides [interoperability with underlying native API](http://diligentgraphics.com/diligent-engine/native-api-interoperability/).  
 [Shader source code converter](http://diligentgraphics.com/diligent-engine/shader-converter/) allows shaders authored in HLSL to 
 be translated to GLSL and used on all supported platforms. 
-The engine supports [integration with Unity](http://diligentgraphics.com/diligent-engine/unity-integration/) and is designed to be used 
-as a graphics subsystem in a standalone game engine, Unity native plugin or any other 3D application. It is distributed under 
+The engine supports [integration with Unity](http://diligentgraphics.com/diligent-engine/integration-with-unity/) and is designed to be 
+used as a graphics subsystem in a standalone game engine, Unity native plugin or any other 3D application. It is distributed under 
 [Apache 2.0 license](License.txt) and is free to use.
 
 ## Features
@@ -50,7 +50,7 @@ as a graphics subsystem in a standalone game engine, Unity native plugin or any 
 | Linux/MacOS/iOS            | [![Build Status](https://travis-ci.org/DiligentGraphics/DiligentEngine.svg?branch=master)](https://travis-ci.org/DiligentGraphics/DiligentEngine)      |
 
 
-Last Stable Release - [v2.2](https://github.com/DiligentGraphics/DiligentEngine/tree/v2.2)
+Last Stable Release - [v2.2.a](https://github.com/DiligentGraphics/DiligentEngine/tree/v2.2.a)
 
 # Clonning the Repository
 
@@ -62,7 +62,7 @@ This is the master repository that contains three [submodules](https://git-scm.c
  
  To checkout the last stable release, run the following commands:
  
-* git checkout tags/v2.2
+* git checkout tags/v2.2.a
 
 * git submodule update --init --recursive
 
@@ -90,7 +90,7 @@ Master repository includes the following submodules:
 # Build and Run Instructions
 
 Diligent Engine uses [CMake](https://cmake.org/) as a cross-platform build tool. 
-To start using cmake, download the [latest release](https://cmake.org/download/) (3.10 or later is required for Windows build).
+To start using cmake, download the [latest release](https://cmake.org/download/) (3.10 or later is required).
 
 ## Win32
 
@@ -100,14 +100,18 @@ navigate to the engine's root folder and run the following command:
 
 *cmake -H. -B./cmk_build/Win64 -G "Visual Studio 15 2017 Win64"*
 
+You can generate Win32 solution that targets Win8.1 SDK using the following command:
+
+*cmake -D CMAKE_SYSTEM_VERSION=8.1 -H. -B./cmk_build/Win64 -G "Visual Studio 15 2017 Win64"*
+
 **WARNING!** In current implementation, full path to cmake build folder **must not contain white spaces**. (If anybody knows a way
 to add quotes to CMake's custom commands, please let me know!)
 
 Open DiligentEngine.sln file in cmk_build/Win64 folder, select configuration and build the engine. Set the desired project
 as startup project (by default, Asteroids demo will be selected) and run it. 
 
-By default, appplications will run in D3D11 mode. To select D3D12 or OpenGL, use the following command line option:
-**mode=**{**D3D11**|**D3D12**|**GL**} (do not use spaces!). If you want to run an application outside of Visual Studio environment,
+By default, appplications will run in D3D11 mode. To select D3D12 or OpenGL, use the following command line options:
+**mode=D3D11**, **mode=D3D12**, or **mode=GL** (do not use spaces!). If you want to run an application outside of Visual Studio environment,
 the application's assets folder must be selected as a working directory. (For Visual Studio, this is automatically configured by 
 CMake). 
 
@@ -121,9 +125,16 @@ To generate build files for Universal Windows platform, you need to define the f
 For example, to generate Visual Studio 2017 64-bit solution and project files in *cmk_build/UWP64* folder, run the following command
 from the engine's root folder:
 
+*cmake -D CMAKE_SYSTEM_NAME=WindowsStore -D CMAKE_SYSTEM_VERSION=10.0 -H. -B./cmk_build/UWP64 -G "Visual Studio 15 2017 Win64"*
+
+You can target specific SDK version by refining CMAKE_SYSTEM_VERSION, for instance:
+
 *cmake -D CMAKE_SYSTEM_NAME=WindowsStore -D CMAKE_SYSTEM_VERSION=10.0.15063.0 -H. -B./cmk_build/UWP64 -G "Visual Studio 15 2017 Win64"*
 
 Set the desired project as startup project (by default, Atmosphere sample will be selected) and run it. 
+
+Note: you can generate solution that targets Windows 8.1 by defining CMAKE_SYSTEM_VERSION=8.1 cmake variable, but the solution will fail
+to build as it will use Visual Studio 2013 (v120) toolset that lacks proper c++11 support.
 
 ## Linux
 
@@ -187,6 +198,103 @@ Run the command below from the engine's root folder to generate Xcode project co
 Open Xcode project file in cmk_build/IOS folder and build the engine. To run the applications on an iOS device,
 you will need to set the appropriate development team in the project settings.
 
+## Customizing Build
+
+Diligent Engine allows clients to customize build settings by providing configuration script file that defines two optional functions:
+
+* `custom_configure_build()` - defines global build properties such as build configurations, c/c++ compile flags, link flags etc.
+* `custom_configure_target()` - defines custom settings for every target in the build.
+
+The path to the configuration script should be provided through `BUILD_CONFIGURATION_FILE` variable when running 
+cmake and must be relative to the cmake root folder, for example:
+
+*cmake -D BUILD_CONFIGURATION_FILE=BuildConfig.cmake -H. -B./cmk_build/Win64 -G "Visual Studio 15 2017 Win64"*
+
+### Customizing global build settings with custom_configure_build() function
+
+If defined, `custom_configure_build()` function is called before any build target is added. By default,
+cmake defines the following four configurations: Debug, Release, RelWithDebInfo, MinSizeRel. If you want, 
+you can define your own build configurations by setting `CMAKE_CONFIGURATION_TYPES` variable. For instance,
+if you want to have only two configuration: Debug and ReleaseMT, add the following line to the `custom_configure_build()`
+function:
+
+```cmake
+set(CMAKE_CONFIGURATION_TYPES Debug ReleaseMT CACHE STRING "Configuration types: Debug, ReleaseMT" FORCE)
+```
+
+The build system needs to know the list of debug and release (optimized) configurations, so the following
+two variables must also be set when `CMAKE_CONFIGURATION_TYPES` variable is defined:
+
+```cmake
+set(DEBUG_CONFIGURATIONS DEBUG CACHE INTERNAL "" FORCE)
+set(RELEASE_CONFIGURATIONS RELEASEMT CACHE INTERNAL "" FORCE)
+```
+
+Note that due to cmake specifics, configuration names listed in `DEBUG_CONFIGURATIONS` and `RELEASE_CONFIGURATIONS`
+**must be capitalized**.
+
+If you define any configuration other than four standard cmake ones, you also need to set the following variables, for every
+new configuration:
+
+* `CMAKE_C_FLAGS_<Config>` - c compile flags
+* `CMAKE_CXX_FLAGS_<Config>` - c++ compile flags
+* `CMAKE_EXE_LINKER_FLAGS_<Config>` - executable link flags
+* `CMAKE_SHARED_LINKER_FLAGS_<Config>` - shared library link flags
+
+For instance:
+
+```cmake
+set(CMAKE_C_FLAGS_RELEASEMT "/MT" CACHE INTERNAL "" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASEMT "/MT" CACHE INTERNAL "" FORCE)
+set(CMAKE_EXE_LINKER_FLAGS_RELEASEMT "/OPT:REF" CACHE INTERNAL "" FORCE)
+set(CMAKE_SHARED_LINKER_FLAGS_RELEASEMT "/OPT:REF" CACHE INTERNAL "" FORCE)
+```
+
+Below is an example of custom_configure_build() function:
+
+```cmake
+function(custom_configure_build)
+    if(CMAKE_CONFIGURATION_TYPES)
+        # Debug configurations
+        set(DEBUG_CONFIGURATIONS DEBUG CACHE INTERNAL "" FORCE)
+        # Release (optimized) configurations
+        set(RELEASE_CONFIGURATIONS RELEASEMT CACHE INTERNAL "" FORCE)
+        # CMAKE_CONFIGURATION_TYPES variable defines build configurations generated by cmake
+        set(CMAKE_CONFIGURATION_TYPES Debug ReleaseMT CACHE STRING "Configuration types: Debug, ReleaseMT" FORCE)
+
+        set(CMAKE_CXX_FLAGS_RELEASEMT "/MT" CACHE INTERNAL "" FORCE)
+        set(CMAKE_C_FLAGS_RELEASEMT "/MT" CACHE INTERNAL "" FORCE)
+        set(CMAKE_EXE_LINKER_FLAGS_RELEASEMT "/OPT:REF" CACHE INTERNAL "" FORCE)
+        set(CMAKE_SHARED_LINKER_FLAGS_RELEASEMT "/OPT:REF" CACHE INTERNAL "" FORCE)
+    endif()
+endfunction()
+```
+
+
+### Customizing individual target build settings with custom_configure_target() function
+
+If defined, `custom_configure_target()` is called for every target created by the build system and
+allows configuring target-specific properties.
+
+By default, the build system sets some target properties. If `custom_configure_target()` sets all required properties,
+it can tell the build system that no further processing is required by setting `TARGET_CONFIGURATION_COMPLETE` parent
+scope variable to `TRUE`:
+
+```cmake
+set(TARGET_CONFIGURATION_COMPLETE TRUE PARENT_SCOPE)
+```
+
+The following is an example of `custom_configure_target()` function:
+
+```cmake
+function(custom_configure_target TARGET)
+    set_target_properties(${TARGET} PROPERTIES
+        STATIC_LIBRARY_FLAGS_RELEASEMT /LTCG
+    )
+    set(TARGET_CONFIGURATION_COMPLETE TRUE PARENT_SCOPE)   
+endfunction()
+```
+
 # Tutorials
 
 ## [Tutorial 01 - Hello Triangle](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial01_HelloTriangle)
@@ -244,6 +352,13 @@ This tutorial shows how to use hardware tessellation to implement simple adaptiv
 rendering algorithm.
 
 
+## [Tutorial 09 - Quads](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial09_Quads)
+
+![](https://github.com/DiligentGraphics/DiligentSamples/blob/master/Tutorials/Tutorial09_Quads/Screenshot.png)
+
+This tutorial shows how to render multiple 2D quads, frequently swithcing textures and blend modes.
+
+
 # Samples
 
 [Sample source code](https://github.com/DiligentGraphics/DiligentSamples)
@@ -293,6 +408,17 @@ and adds implementation using Diligent Engine API to allow comparing performance
 
 
 # Version History
+
+## v2.2.a
+
+* Enabled Win32 build targeting Windows 8.1 SDK
+* Enabled build customization through custom build config file
+* Implemented PSO compatibility
+* Fixed the following issues: 
+  * [Messy #include structure?](https://github.com/DiligentGraphics/DiligentEngine/issues/3) 
+  * [Move GetEngineFactoryXXXType and LoadGraphicsEngineXXX to Diligent namespace](https://github.com/DiligentGraphics/DiligentEngine/issues/5)
+  * [Customizable build scripts](https://github.com/DiligentGraphics/DiligentEngine/issues/6)
+  * [Win32FileSystem releated functions should use wchar_t (UTF-16)](https://github.com/DiligentGraphics/DiligentEngine/issues/7)
 
 ## v2.2
 

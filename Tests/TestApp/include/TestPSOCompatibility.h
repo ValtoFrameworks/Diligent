@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2017 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -20,27 +20,18 @@
  *  all other commercial damages or losses), even if such Contributor has been advised 
  *  of the possibility of such damages.
  */
+
 #pragma once
 
-#include "PlatformDefinitions.h"
+#include "UnitTestBase.h"
 
-#if GL_SUPPORTED || GLES_SUPPORTED
-
-#include "DiligentGraphicsAdapter.h"
-
-class DiligentGraphicsAdapterGL : public DiligentGraphicsAdapter
+class TestPSOCompatibility : public UnitTestBase
 {
 public:
-    virtual ~DiligentGraphicsAdapterGL()override {}
-
-    DiligentGraphicsAdapterGL(const class UnityGraphicsGLCoreES_Emulator& UnityGraphicsGL)noexcept;
-
-    virtual void BeginFrame()override final;
-    virtual void EndFrame()override final;
-    virtual bool UsesReverseZ()override final;
+    TestPSOCompatibility( Diligent::IRenderDevice *pDevice );
 
 private:
-    const UnityGraphicsGLCoreES_Emulator& m_UnityGraphicsGL;
+    Diligent::RefCntAutoPtr<Diligent::IPipelineState> CreateTestPSO(const char *VSSource, const char *PSSource);
+    Diligent::RefCntAutoPtr<Diligent::IPipelineState> CreateTestPSO(const char *CSSource);
+    Diligent::RefCntAutoPtr<Diligent::IRenderDevice> m_pDevice;
 };
-
-#endif // GL_SUPPORTED || GLES_SUPPORTED
