@@ -40,6 +40,10 @@
 #include "TestCreateObjFromNativeResGL.h"
 #endif
 
+#if VULKAN_SUPPORTED
+#include "TestCreateObjFromNativeResVK.h"
+#endif
+
 using namespace Diligent;
 
 class TextureCreationVerifier
@@ -73,6 +77,12 @@ public:
             case DeviceType::OpenGLES:
                 m_pTestCreateObjFromNativeRes.reset(new TestCreateObjFromNativeResGL(pDevice));
             break;
+#endif
+
+#if VULKAN_SUPPORTED
+            case DeviceType::Vulkan:
+                m_pTestCreateObjFromNativeRes.reset(new TestCreateObjFromNativeResVK(pDevice));
+                break;
 #endif
 
             default: UNEXPECTED("Unexpected device type");
@@ -183,7 +193,7 @@ private:
                                 TextureData &InitData)
     {
 
-        auto PixelSize = PixelFormatAttribs.ComponentSize * PixelFormatAttribs.NumComponents;
+        Uint32 PixelSize = PixelFormatAttribs.ComponentSize * PixelFormatAttribs.NumComponents;
         assert( PixelSize == m_PixelSize );
             
         Uint32 ArrSize = (TexDesc.Type == RESOURCE_DIM_TEX_3D) ? 1 : TexDesc.ArraySize;
@@ -264,9 +274,18 @@ private:
             PrepareSubresourceData(TexDesc, PixelFormatAttribs, Data, SubResources, InitData);
 
             TexDesc.Name = "TestTexture2";
-            pTestTex.Release();
-            m_pDevice->CreateTexture( TexDesc, InitData, &pTestTex );
-            m_pTestCreateObjFromNativeRes->CreateTexture(pTestTex);
+            RefCntAutoPtr<Diligent::ITexture> pTestTex2;
+            m_pDevice->CreateTexture( TexDesc, InitData, &pTestTex2 );
+            m_pTestCreateObjFromNativeRes->CreateTexture(pTestTex2);
+            Box SrcBox;
+            SrcBox.MinX = TexDesc.Width/4;
+            SrcBox.MinY = TexDesc.Height/4;
+            SrcBox.MinZ = ( TexDesc.Type == RESOURCE_DIM_TEX_3D ) ? TexDesc.Depth/4 : 0;
+            SrcBox.MaxX = std::max(TexDesc.Width/3, SrcBox.MinX+1);
+            SrcBox.MaxY = std::max(TexDesc.Height/3, SrcBox.MinY+1);
+            SrcBox.MaxZ = ( TexDesc.Type == RESOURCE_DIM_TEX_3D ) ? std::max(TexDesc.Depth/3, SrcBox.MinZ+1) : 1;
+            //pTestTex2->UpdateData(m_pDeviceContext, 0, 0, DstBox, SubResources[0]);
+            pTestTex->CopyData(m_pDeviceContext, pTestTex2, 0, 0, &SrcBox, 0, 0, 0,0,0);
         }
 
         const auto &DeviceCaps = m_pDevice->GetDeviceCaps();
@@ -275,6 +294,18 @@ private:
         {
             TextureViewDesc ViewDesc;
             ViewDesc.TextureDim = TexDesc.Type;
+            
+            if( SampleCount > 1 )
+            {
+                ViewDesc.MostDetailedMip = 0;
+                ViewDesc.NumMipLevels = 1;
+            }
+            else
+            {
+                ViewDesc.MostDetailedMip = 1;
+                ViewDesc.NumMipLevels = 2;
+            }
+
             if( TexDesc.Type == RESOURCE_DIM_TEX_1D_ARRAY || TexDesc.Type == RESOURCE_DIM_TEX_2D_ARRAY )
             {
                 ViewDesc.FirstArraySlice = 3;
@@ -287,28 +318,17 @@ private:
                     ViewDesc.FirstDepthSlice = 3;
                     ViewDesc.NumDepthSlices = 4;
                 }
-                else
+                else if( DeviceCaps.DevType == DeviceType::Vulkan && ViewDesc.ViewType != TEXTURE_VIEW_RENDER_TARGET && ViewDesc.ViewType != TEXTURE_VIEW_DEPTH_STENCIL || DeviceCaps.DevType != DeviceType::Vulkan)
                 {
                     // OpenGL cannot create views for separate depth slices
                     ViewDesc.FirstDepthSlice = 0;
-                    ViewDesc.NumDepthSlices = 1;
+                    ViewDesc.NumDepthSlices = TexDesc.Depth >> ViewDesc.MostDetailedMip;
                 }
             }
             else
             {
                 ViewDesc.FirstArraySlice = 0;
                 ViewDesc.NumArraySlices = 1;
-            }
-
-            if( SampleCount > 1 )
-            {
-                ViewDesc.MostDetailedMip = 0;
-                ViewDesc.NumMipLevels = 1;
-            }
-            else
-            {
-                ViewDesc.MostDetailedMip = 1;
-                ViewDesc.NumMipLevels = 2;
             }
 
             if( TexDesc.BindFlags & BIND_SHADER_RESOURCE )
@@ -352,11 +372,13 @@ private:
                 FirstTime = false;
             }
         }
-
+        
         // It is necessary to call Flush() to force the driver to release the resources.
         // Without flushing the command buffer, the memory is not released until sometimes 
         // later causing out-of-memory error
         m_pDeviceContext->Flush();
+        // Also call FinishFrame() because otherwise resources will not be released
+        m_pDeviceContext->FinishFrame();
     }
     
 
@@ -592,9 +614,9 @@ TestTextureCreation::TestTextureCreation( IRenderDevice *pDevice, IDeviceContext
       //{TEX_FORMAT_X32_TYPELESS_G8X24_UINT,  8, BindD, false, "X32_TYPELESS_G8X24_UINT"},
 
       //{TEX_FORMAT_RGB10A2_TYPELESS,        4, BindSRU, true, "RGB10A2_TYPELESS"},
-        {TEX_FORMAT_RGB10A2_UNORM,           4, BindSRU, true, "RGB10A2_UNORM"},
-        {TEX_FORMAT_RGB10A2_UINT,            4, BindSRU, true, "RGB10A2_UINT"},
-        {TEX_FORMAT_R11G11B10_FLOAT,         4, BindSRU, false,"R11G11B10_FLOAT"},
+        {TEX_FORMAT_RGB10A2_UNORM,           4, BindSR,   true, "RGB10A2_UNORM"},
+        {TEX_FORMAT_RGB10A2_UINT,            4, BindS,    true, "RGB10A2_UINT"},
+        {TEX_FORMAT_R11G11B10_FLOAT,         4, BindSRU, false, "R11G11B10_FLOAT"},
 
       //{TEX_FORMAT_RGBA8_TYPELESS,          4, BindSRU, true, "RGBA8_TYPELESS"},
         {TEX_FORMAT_RGBA8_UNORM,             4, BindSRU, true, "RGBA8_UNORM"},
@@ -617,7 +639,7 @@ TestTextureCreation::TestTextureCreation( IRenderDevice *pDevice, IDeviceContext
         {TEX_FORMAT_R32_SINT,                4, BindSRU, true, "R32_SINT"},
 
       //{TEX_FORMAT_R24G8_TYPELESS,          4, BindD, true, "R24G8_TYPELESS"},
-        {TEX_FORMAT_D24_UNORM_S8_UINT,       4, BindD, true, "D24_UNORM_S8_UINT"},
+        {TEX_FORMAT_D24_UNORM_S8_UINT,       4, BindD, false,"D24_UNORM_S8_UINT"},
       //{TEX_FORMAT_R24_UNORM_X8_TYPELESS,   4, BindD, true, "R24_UNORM_X8_TYPELESS"},
       //{TEX_FORMAT_X24_TYPELESS_G8_UINT,    4, BindD, true, "X24_TYPELESS_G8_UINT"},
                                                        
@@ -691,7 +713,7 @@ TestTextureCreation::TestTextureCreation( IRenderDevice *pDevice, IDeviceContext
             continue;
         }
         ++m_NumFormatsTested;
-        assert(CurrAttrs.PixelSize == PixelFormatAttribs.ComponentSize * PixelFormatAttribs.NumComponents || 
+        assert(CurrAttrs.PixelSize == Uint32{PixelFormatAttribs.ComponentSize} * PixelFormatAttribs.NumComponents || 
                PixelFormatAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED);
         Verifier.Test(CurrAttrs.Fmt, CurrAttrs.PixelSize, CurrAttrs.BindFlags, CurrAttrs.TestDataUpload);
     }
@@ -705,7 +727,7 @@ void TestTextureCreation::CheckFormatSize(TEXTURE_FORMAT *begin, TEXTURE_FORMAT 
     for(auto fmt = begin; fmt != end; ++fmt)
     {
         auto FmtAttrs = m_pDevice->GetTextureFormatInfo(*fmt);
-        assert(FmtAttrs.ComponentSize * FmtAttrs.NumComponents == RefSize);
+        assert(Uint32{FmtAttrs.ComponentSize} * FmtAttrs.NumComponents == RefSize);
     }
 }
 

@@ -42,6 +42,10 @@
 #   include "RenderDeviceFactoryOpenGL.h"
 #endif
 
+#if VULKAN_SUPPORTED
+#   include "RenderDeviceFactoryVk.h"
+#endif
+
 #include "FileSystem.h"
 #include "MapHelper.h"
 #include "RenderScriptTest.h"
@@ -60,6 +64,8 @@
 #include "PlatformMisc.h"
 #include "TestBufferCreation.h"
 #include "TestBrokenShader.h"
+#include "TestShaderResourceLayout.h"
+#include "TestShaderVarAccess.h"
 
 using namespace Diligent;
 
@@ -75,7 +81,8 @@ TestApp::TestApp() :
 
 TestApp::~TestApp()
 {
-    m_pMTResCreationTest->StopThreads();
+    if(m_pMTResCreationTest)
+        m_pMTResCreationTest->StopThreads();
 }
 
 
@@ -194,6 +201,47 @@ void TestApp::InitializeDiligentEngine(
         break;
 #endif
 
+#if VULKAN_SUPPORTED
+        case DeviceType::Vulkan:
+        {
+#if ENGINE_DLL
+            GetEngineFactoryVkType GetEngineFactoryVk = nullptr;
+            // Load the dll and import GetEngineFactoryVk() function
+            LoadGraphicsEngineVk(GetEngineFactoryVk);
+#endif
+            EngineVkAttribs EngVkAttribs;
+
+            EngVkAttribs.EnableValidation = true;
+            EngVkAttribs.MainDescriptorPoolSize = EngineVkAttribs::DescriptorPoolSize{ 64, 64, 256, 256, 64, 32, 32, 32, 32 };
+            EngVkAttribs.DynamicDescriptorPoolSize = EngineVkAttribs::DescriptorPoolSize{ 64, 64, 256, 256, 64, 32, 32, 32, 32 };
+            EngVkAttribs.UploadHeapPageSize = 32*1024;
+            //EngVkAttribs.DeviceLocalMemoryReserveSize = 32 << 20;
+            //EngVkAttribs.HostVisibleMemoryReserveSize = 48 << 20;
+
+            auto& Features = EngVkAttribs.EnabledFeatures;
+            Features.depthBiasClamp                 = true;
+            Features.fillModeNonSolid               = true;
+            Features.depthClamp                     = true;
+            Features.independentBlend               = true;
+            Features.samplerAnisotropy              = true;
+            Features.geometryShader                 = true;
+            Features.tessellationShader             = true;
+            Features.dualSrcBlend                   = true;
+            Features.multiViewport                  = true;
+            Features.imageCubeArray                 = true;
+            Features.textureCompressionBC           = true;
+            Features.vertexPipelineStoresAndAtomics = true;
+            Features.fragmentStoresAndAtomics       = true;            
+
+            ppContexts.resize(1 + NumDeferredCtx);
+            auto *pFactoryVk = GetEngineFactoryVk();
+            pFactoryVk->CreateDeviceAndContextsVk(EngVkAttribs, &m_pDevice, ppContexts.data(), NumDeferredCtx);
+
+            if (!m_pSwapChain && NativeWindowHandle != nullptr)
+                pFactoryVk->CreateSwapChainVk(m_pDevice, ppContexts[0], SCDesc, NativeWindowHandle, &m_pSwapChain);
+        }
+        break;
+#endif
         default:
             LOG_ERROR_AND_THROW("Unknown device type");
             break;
@@ -224,38 +272,44 @@ void TestApp::InitializeDiligentEngine(
 
 void TestApp::InitializeRenderers()
 {
-    bool bUseOpenGL = m_DeviceType == DeviceType::OpenGL || m_DeviceType == DeviceType::OpenGLES;
-
-    TestRasterizerState TestRS(m_pDevice, m_pImmediateContext);
-    TestBlendState TestBS(m_pDevice, m_pImmediateContext);
-    TestDepthStencilState TestDSS(m_pDevice, m_pImmediateContext);
-    TestTextureCreation TestTexCreation(m_pDevice, m_pImmediateContext);
-    TestBufferCreation TestBuffCreation(m_pDevice, m_pImmediateContext);
-    TestPSOCompatibility TestPSOCompat(m_pDevice);
-    TestBrokenShader TestBrknShdr(m_pDevice);
-
-    m_TestGS.Init(m_pDevice, m_pImmediateContext);
-    m_TestTessellation.Init(m_pDevice, m_pImmediateContext);
-    m_pTestShaderResArrays.reset(new TestShaderResArrays(m_pDevice, m_pImmediateContext, bUseOpenGL, 0.4f, -0.9f, 0.5f, 0.5f));
+    TestRasterizerState TestRS{m_pDevice, m_pImmediateContext};
+    TestBlendState TestBS{m_pDevice, m_pImmediateContext};
+    TestDepthStencilState TestDSS{m_pDevice, m_pImmediateContext};
+    TestBufferCreation TestBuffCreation{m_pDevice, m_pImmediateContext};
+    TestTextureCreation TestTexCreation{m_pDevice, m_pImmediateContext};
+    TestPSOCompatibility TestPSOCompat{m_pDevice};
+    TestBrokenShader TestBrknShdr{m_pDevice};
+    
+    m_TestGS.Init(m_pDevice, m_pImmediateContext, m_pSwapChain);
+    m_TestTessellation.Init(m_pDevice, m_pImmediateContext, m_pSwapChain);
+    m_pTestShaderResArrays.reset(new TestShaderResArrays(m_pDevice, m_pImmediateContext, m_pSwapChain, 0.4f, -0.9f, 0.5f, 0.5f));
     m_pMTResCreationTest.reset(new MTResourceCreationTest(m_pDevice, m_pImmediateContext, 7));
-
-#if GL_SUPPORTED || GLES_SUPPORTED
-    ShaderConverterTest ConverterTest(m_pDevice, m_pImmediateContext);
+    
+    TestShaderVarAccess TestShaderVarAccess{m_pDevice, m_pImmediateContext, m_pSwapChain};
+    TestShaderResourceLayout TestShaderResLayout{m_pDevice, m_pImmediateContext};
+    
+#if GL_SUPPORTED || GLES_SUPPORTED || VULKAN_SUPPORTED
+    ShaderConverterTest ConverterTest{m_pDevice, m_pImmediateContext};
 #endif
-    TestSamplerCreation TestSamplers(m_pDevice);
-
-    RenderScriptTest LuaTest(m_pDevice, m_pImmediateContext);
-
-    m_pRenderScript = CreateRenderScriptFromFile("TestRenderScripts.lua", m_pDevice, m_pImmediateContext, [](ScriptParser *pScriptParser)
+    
+    TestSamplerCreation TestSamplers{m_pDevice};
+    
+    RenderScriptTest LuaTest{m_pDevice, m_pImmediateContext};
+    
+    const auto* BackBufferFmt = m_pDevice->GetTextureFormatInfo(m_pSwapChain->GetDesc().ColorBufferFormat).Name;
+    const auto* DepthBufferFmt = m_pDevice->GetTextureFormatInfo(m_pSwapChain->GetDesc().DepthBufferFormat).Name;
+    m_pRenderScript = CreateRenderScriptFromFile("TestRenderScripts.lua", m_pDevice, m_pImmediateContext, [BackBufferFmt, DepthBufferFmt](ScriptParser *pScriptParser)
     {
+        pScriptParser->SetGlobalVariable( "extBackBufferFormat", BackBufferFmt );
+        pScriptParser->SetGlobalVariable( "extDepthBufferFormat", DepthBufferFmt );
     });
 
     m_pTestDrawCommands.reset(new TestDrawCommands);
-    m_pTestDrawCommands->Init(m_pDevice, m_pImmediateContext, 0, 0, 1, 1);
+    m_pTestDrawCommands->Init(m_pDevice, m_pImmediateContext, m_pSwapChain, 0, 0, 1, 1);
 
     m_pTestBufferAccess.reset(new TestBufferAccess);
-    m_pTestBufferAccess->Init(m_pDevice, m_pImmediateContext, -1, 0, 0.5, 0.5);
-
+    m_pTestBufferAccess->Init(m_pDevice, m_pImmediateContext, m_pSwapChain, -1, 0, 0.5, 0.5);
+    
 
     TEXTURE_FORMAT TestFormats[16] =
     {
@@ -270,25 +324,23 @@ void TestApp::InitializeRenderers()
         {
             auto Ind = i + j * 4;
             m_pTestTexturing[Ind].reset(new TestTexturing);
-            m_pTestTexturing[Ind]->Init(m_pDevice, m_pImmediateContext, TestFormats[Ind], bUseOpenGL, -1 + (float)i*1.f / 4.f, -1 + (float)j*1.f / 4.f, 0.9f / 4.f, 0.9f / 4.f);
+            m_pTestTexturing[Ind]->Init(m_pDevice, m_pImmediateContext, m_pSwapChain, TestFormats[Ind], -1 + (float)i*1.f / 4.f, -1 + (float)j*1.f / 4.f, 0.9f / 4.f, 0.9f / 4.f);
         }
 
-#if 0
     TestCopyTexData TestCopyData(m_pDevice, m_pImmediateContext);
-#endif
 
     TestVPAndSR TestVPAndSR(m_pDevice, m_pImmediateContext);
 
     m_pTestCS.reset(new TestComputeShaders);
-    m_pTestCS->Init(m_pDevice, m_pImmediateContext);
+    m_pTestCS->Init(m_pDevice, m_pImmediateContext, m_pSwapChain);
 
     m_pTestRT.reset(new TestRenderTarget);
-    m_pTestRT->Init(m_pDevice, m_pImmediateContext, -0.4f, 0.55f, 0.4f, 0.4f);
+    m_pTestRT->Init(m_pDevice, m_pImmediateContext, m_pSwapChain, -0.4f, 0.55f, 0.4f, 0.4f);
 
     m_pMTResCreationTest->StartThreads();
 
     float instance_offsets[] = { -0.3f, 0.0f, 0.0f, 0.0f, +0.3f, -0.3f };
-
+    
     {
         m_pRenderScript->GetBufferByName("InstanceBuffer", &m_pInstBuff);
     }
@@ -303,7 +355,7 @@ void TestApp::InitializeRenderers()
         //BuffData.DataSize = sizeof(instance_offsets);
         m_pDevice->CreateBuffer(BuffDesc, Diligent::BufferData(), &m_pInstBuff2);
     }
-
+    
 
     {
         m_pRenderScript->GetBufferByName("UnfiformBuffer1", &m_pUniformBuff);
@@ -380,13 +432,19 @@ void TestApp::InitializeRenderers()
         TexDesc.Type = RESOURCE_DIM_TEX_2D;
         TexDesc.Width = 512;
         TexDesc.Height = 512;
-        TexDesc.Format = TEX_FORMAT_RGBA8_UNORM_SRGB;
+        TexDesc.Format = m_pSwapChain->GetDesc().ColorBufferFormat;
         TexDesc.Usage = USAGE_DEFAULT;
         TexDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET;
         TexDesc.Name = "UniqueTexture";
         RefCntAutoPtr<ITexture> pTex;
         m_pDevice->CreateTexture(TexDesc, TextureData(), &pTex);
         ITextureView *pRTVs[] = { pTex->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET) };
+
+        TexDesc.Format = m_pSwapChain->GetDesc().DepthBufferFormat;
+        RefCntAutoPtr<ITexture> pDepthTex;
+        TexDesc.BindFlags = BIND_DEPTH_STENCIL;
+        m_pDevice->CreateTexture(TexDesc, TextureData(), &pDepthTex);
+        auto* pDSV = pDepthTex->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
 
         {
             MapHelper<float> UniformData(m_pImmediateContext, m_pUniformBuff, MAP_WRITE, MAP_FLAG_DISCARD);
@@ -401,13 +459,17 @@ void TestApp::InitializeRenderers()
             UniformData[3] = 0;
         }
 
+        m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr);
+        float ClearColor[] = {0.1f, 0.2f, 0.4f, 1.0f};
+        m_pImmediateContext->ClearRenderTarget(nullptr, ClearColor);
         Diligent::DrawAttribs DrawAttrs;
         DrawAttrs.NumVertices = 3;
-        DrawAttrs.Topology = Diligent::PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         m_pRenderScript->Run(m_pImmediateContext, "DrawTris", DrawAttrs);
-
+        
         // This adds transition barrier for pTex1
-        m_pImmediateContext->SetRenderTargets(1, pRTVs, nullptr);
+        m_pImmediateContext->SetRenderTargets(1, pRTVs, pDSV);
+        m_pImmediateContext->ClearRenderTarget(pRTVs[0], ClearColor);
+        m_pImmediateContext->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG);
         // Generate draw command to the bound render target
         m_pImmediateContext->Draw(DrawAttrs);
         m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr);
@@ -432,6 +494,12 @@ void TestApp::InitializeRenderers()
         // This may cause D3D12 error
         m_pImmediateContext->Flush();
     }
+
+    {
+        FenceDesc fenceDesc;
+        fenceDesc.Name = "Test fence";
+        m_pDevice->CreateFence(fenceDesc, &m_pFence);
+    }
 }
 
 void TestApp::ProcessCommandLine(const char *CmdLine)
@@ -453,9 +521,13 @@ void TestApp::ProcessCommandLine(const char *CmdLine)
         {
             m_DeviceType = DeviceType::OpenGL;
         }
+        else if (_stricmp(pos, "VK") == 0)
+        {
+            m_DeviceType = DeviceType::Vulkan;
+        }
         else
         {
-            LOG_ERROR_AND_THROW("Unknown device type. Only the following types are supported: D3D11, D3D12, GL");
+            LOG_ERROR_AND_THROW("Unknown device type. Only the following types are supported: D3D11, D3D12, GL, VK");
         }
     }
     else
@@ -469,6 +541,7 @@ void TestApp::ProcessCommandLine(const char *CmdLine)
         case DeviceType::D3D11: m_AppTitle.append(" (D3D11)"); break;
         case DeviceType::D3D12: m_AppTitle.append(" (D3D12)"); break;
         case DeviceType::OpenGL: m_AppTitle.append(" (OpenGL)"); break;
+        case DeviceType::Vulkan: m_AppTitle.append(" (Vulkan)"); break;
         default: UNEXPECTED("Unknown device type");
     }
 }
@@ -480,7 +553,7 @@ void TestApp::WindowResize(int width, int height)
         m_pSwapChain->Resize(width, height);
         //auto SCWidth = m_pSwapChain->GetDesc().Width;
         //auto SCHeight = m_pSwapChain->GetDesc().Height;
-
+        
 
     }
 }
@@ -494,18 +567,21 @@ void TestApp::Update(double CurrTime, double ElapsedTime)
 void TestApp::Render()
 {
     m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr);
+    float ClearColor[] = {0.1f, 0.2f, 0.4f, 1.0f};
+    m_pImmediateContext->ClearRenderTarget(nullptr, ClearColor);
+    m_pImmediateContext->ClearDepthStencil(nullptr, CLEAR_DEPTH_FLAG, 1.f);
 
     double dCurrTime = m_CurrTime;
-
+    
     float instance_offsets[] = { -0.3f, (float)sin(dCurrTime + 0.5)*0.1f, 0.0f, (float)sin(dCurrTime)*0.1f, +0.3f, -0.3f + (float)cos(dCurrTime)*0.1f };
     m_pInstBuff2->UpdateData(m_pImmediateContext, sizeof(float) * 1, sizeof(float) * 5, &instance_offsets[1]);
     m_pInstBuff->CopyData(m_pImmediateContext, m_pInstBuff2, sizeof(float) * 2, sizeof(float) * 2, sizeof(float) * 4);
-
+    
     {
         MapHelper<float> UniformData(m_pImmediateContext, m_pUniformBuff, MAP_WRITE, MAP_FLAG_DISCARD);
         UniformData[0] = UniformData[1] = UniformData[2] = UniformData[3] = (float)fabs(sin(dCurrTime));
     }
-
+    
     {
         MapHelper<float> UniformData(m_pImmediateContext, m_pUniformBuff2, MAP_WRITE, MAP_FLAG_DISCARD);
         UniformData[0] = (float)sin(dCurrTime*3.8)*0.1f;
@@ -516,7 +592,6 @@ void TestApp::Render()
 
     Diligent::DrawAttribs DrawAttrs;
     DrawAttrs.NumVertices = 3;
-    DrawAttrs.Topology = Diligent::PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     m_pRenderScript->Run(m_pImmediateContext, "DrawTris", DrawAttrs);
 
     DrawAttrs.IsIndexed = true;
@@ -536,9 +611,16 @@ void TestApp::Render()
     m_pTestShaderResArrays->Draw();
     m_TestGS.Draw();
     m_TestTessellation.Draw();
+    
+    auto CompletedFenceValue = m_pFence->GetCompletedValue();
+    VERIFY_EXPR(CompletedFenceValue < m_NextFenceValue);
+    m_pImmediateContext->SignalFence(m_pFence, m_NextFenceValue++);
 
     m_pImmediateContext->Flush();
     m_pImmediateContext->InvalidateState();
+    
+    CompletedFenceValue = m_pFence->GetCompletedValue();
+    VERIFY_EXPR(CompletedFenceValue < m_NextFenceValue);
 }
 
 void TestApp::Present()

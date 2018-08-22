@@ -24,6 +24,11 @@
 #include "RenderDeviceFactoryD3D11.h"
 #include "RenderDeviceFactoryD3D12.h"
 #include "RenderDeviceFactoryOpenGL.h"
+
+#if VULKAN_SUPPORTED
+#include "RenderDeviceFactoryVk.h"
+#endif
+
 #include "BasicShaderSourceStreamFactory.h"
 #include "MapHelper.h"
 
@@ -42,6 +47,9 @@ namespace Diligent
     GetEngineFactoryD3D11Type GetEngineFactoryD3D11 = nullptr;
     GetEngineFactoryD3D12Type GetEngineFactoryD3D12 = nullptr;
     GetEngineFactoryOpenGLType GetEngineFactoryOpenGL = nullptr;
+#if VULKAN_SUPPORTED
+    GetEngineFactoryVkType GetEngineFactoryVulkan = nullptr;
+#endif
 #endif
 }
 
@@ -59,6 +67,7 @@ void Asteroids::InitDevice(HWND hWnd, DeviceType DevType)
     SwapChainDesc.DefaultDepthValue = 0.f;
     switch (DevType)
     {
+        case DeviceType::Vulkan:
         case DeviceType::D3D12:
         case DeviceType::D3D11:
         {
@@ -77,7 +86,7 @@ void Asteroids::InitDevice(HWND hWnd, DeviceType DevType)
                 pFactoryD3D11->CreateDeviceAndContextsD3D11( DeviceAttribs, &mDevice, ppContexts.data(), mNumSubsets-1 );
                 pFactoryD3D11->CreateSwapChainD3D11( mDevice, ppContexts[0], SwapChainDesc, FullScreenModeDesc{}, hWnd, &mSwapChain );
             }
-            else
+            else if(DevType == DeviceType::D3D12)
             {
                 EngineD3D12Attribs Attribs;
                 Attribs.GPUDescriptorHeapDynamicSize[0] = 65536*4;
@@ -94,6 +103,25 @@ void Asteroids::InitDevice(HWND hWnd, DeviceType DevType)
                 pFactoryD3D12->CreateDeviceAndContextsD3D12( Attribs, &mDevice, ppContexts.data(), mNumSubsets-1 );
                 pFactoryD3D12->CreateSwapChainD3D12( mDevice, ppContexts[0], SwapChainDesc, FullScreenModeDesc{}, hWnd, &mSwapChain );
             }
+#if VULKAN_SUPPORTED
+            else if(DevType == DeviceType::Vulkan)
+            {
+                EngineVkAttribs Attribs;
+                Attribs.DynamicHeapSize = 32 << 20;
+#if ENGINE_DLL
+                if(!GetEngineFactoryVulkan)
+                    LoadGraphicsEngineVk(GetEngineFactoryVulkan);
+#endif
+                auto *pFactoryVk = GetEngineFactoryVulkan();
+                pFactoryVk->CreateDeviceAndContextsVk( Attribs, &mDevice, ppContexts.data(), mNumSubsets-1 );
+                pFactoryVk->CreateSwapChainVk( mDevice, ppContexts[0], SwapChainDesc, hWnd, &mSwapChain );
+            }
+#endif
+            else
+            {
+                UNEXPECTED("Unexpected device type");
+            }
+
             
             mDeviceCtxt.Attach(ppContexts[0]);
             mDeferredCtxt.resize(mNumSubsets-1);
@@ -149,6 +177,8 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         case DeviceType::D3D11: spriteFile = "DiligentD3D11.dds"; break;
         case DeviceType::D3D12: spriteFile = "DiligentD3D12.dds"; break;
         case DeviceType::OpenGL: spriteFile = "DiligentGL.dds"; break;
+        case DeviceType::Vulkan: spriteFile = "DiligentVk.dds"; break;
+        default: UNEXPECTED("Unexpected device type");
     }
     mSprite.reset( new GUISprite(5, 10, 140, 50, spriteFile) );
     
@@ -171,7 +201,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
     {
         PipelineStateDesc PSODesc;
         LayoutElement inputDesc[] = {
-            LayoutElement( 0, 0, 3, VT_FLOAT32),
+            LayoutElement( 0, 0, 3, VT_FLOAT32, false, 0, sizeof(Vertex)),
             LayoutElement( 1, 0, 3, VT_FLOAT32)
         };
 
@@ -222,10 +252,10 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
 
             mDevice->CreateShader(attribs, &ps);
         }
-        PSODesc.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_RGBA8_UNORM_SRGB;
+        PSODesc.GraphicsPipeline.RTVFormats[0] = mSwapChain->GetDesc().ColorBufferFormat;
         PSODesc.GraphicsPipeline.NumRenderTargets = 1;
-        PSODesc.GraphicsPipeline.DSVFormat = TEX_FORMAT_D32_FLOAT;
-        PSODesc.GraphicsPipeline.PrimitiveTopologyType = PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        PSODesc.GraphicsPipeline.DSVFormat = mSwapChain->GetDesc().DepthBufferFormat;
+        PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         PSODesc.Name = "Asteroids PSO";
 
         PSODesc.GraphicsPipeline.pVS = vs;
@@ -321,10 +351,10 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         PSODesc.GraphicsPipeline.pVS = vs;
         PSODesc.GraphicsPipeline.pPS = ps;
 
-        PSODesc.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_RGBA8_UNORM_SRGB;
+        PSODesc.GraphicsPipeline.RTVFormats[0] = mSwapChain->GetDesc().ColorBufferFormat;
         PSODesc.GraphicsPipeline.NumRenderTargets = 1;
-        PSODesc.GraphicsPipeline.DSVFormat = TEX_FORMAT_D32_FLOAT;
-        PSODesc.GraphicsPipeline.PrimitiveTopologyType = PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        PSODesc.GraphicsPipeline.DSVFormat = mSwapChain->GetDesc().DepthBufferFormat;
+        PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
         mDevice->CreatePipelineState(PSODesc, &mSkyboxPSO);
     }
@@ -369,10 +399,10 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
 
         PSODesc.GraphicsPipeline.DepthStencilDesc.DepthEnable = false;
 
-        PSODesc.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_RGBA8_UNORM_SRGB;
+        PSODesc.GraphicsPipeline.RTVFormats[0] = mSwapChain->GetDesc().ColorBufferFormat;
         PSODesc.GraphicsPipeline.NumRenderTargets = 1;
-        PSODesc.GraphicsPipeline.DSVFormat = TEX_FORMAT_D32_FLOAT;
-        PSODesc.GraphicsPipeline.PrimitiveTopologyType = PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        PSODesc.GraphicsPipeline.DSVFormat = mSwapChain->GetDesc().DepthBufferFormat;
+        PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         
         RefCntAutoPtr<IShader> sprite_vs, sprite_ps, font_ps;
         {
@@ -636,7 +666,6 @@ void Asteroids::WorkerThreadFunc(Asteroids *pThis, Diligent::Uint32 ThreadNum)
         // Increment number of completed threads
         ++pThis->m_NumThreadsCompleted;
     }
-   
 }
 
 void Asteroids::RenderSubset(Diligent::Uint32 SubsetNum,
@@ -655,9 +684,8 @@ void Asteroids::RenderSubset(Diligent::Uint32 SubsetNum,
 
     {
         IBuffer* ia_buffers[] = { mVertexBuffer };
-        Uint32 ia_strides[] = { sizeof(Vertex) };
         Uint32 ia_offsets[] = { 0 };
-        pCtx->SetVertexBuffers(0, 1, ia_buffers, ia_strides, ia_offsets, 0);
+        pCtx->SetVertexBuffers(0, 1, ia_buffers, ia_offsets, 0);
         pCtx->SetIndexBuffer(mIndexBuffer, 0);
     }
 
@@ -686,11 +714,10 @@ void Asteroids::RenderSubset(Diligent::Uint32 SubsetNum,
         }
         else if( m_BindingMode == BindingMode::TextureMutable )
         {
-            pCtx->CommitShaderResources(mAsteroidsSRBs[staticData->textureIndex], 0);
+            pCtx->CommitShaderResources(mAsteroidsSRBs[staticData->textureIndex], COMMIT_SHADER_RESOURCES_FLAG_VERIFY_STATES);
         }
 
         DrawAttribs attribs;
-        attribs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         attribs.IsIndexed = true;
         attribs.NumIndices = dynamicData->indexCount;
         attribs.IndexType = VT_UINT16;
@@ -776,6 +803,12 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
         }
     }
 
+    // Call FinishFrame() to release dynamic resources allocated by deferred contexts
+    // IMPORTANT: we must wait until the command lists are submitted for execution
+    // because FinishFrame() invalidates all dynamic resources
+    for(auto& ctx : mDeferredCtxt)
+        ctx->FinishFrame();
+
     QueryPerformanceCounter((LARGE_INTEGER*)&currCounter);
     mRenderTicks = currCounter-mRenderTicks;
 
@@ -788,15 +821,13 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
         }
 
         IBuffer* ia_buffers[] = { mSkyboxVertexBuffer };
-        UINT ia_strides[] = { sizeof(SkyboxVertex) };
         UINT ia_offsets[] = { 0 };
-        mDeviceCtxt->SetVertexBuffers(0, 1, ia_buffers, ia_strides, ia_offsets, 0);
+        mDeviceCtxt->SetVertexBuffers(0, 1, ia_buffers, ia_offsets, 0);
 
         mDeviceCtxt->SetPipelineState(mSkyboxPSO);
         mDeviceCtxt->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
 
         DrawAttribs DrawAttrs;
-        DrawAttrs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         DrawAttrs.NumVertices = 6*6;
         mDeviceCtxt->Draw(DrawAttrs);
     }
@@ -819,9 +850,8 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
         }
 
         IBuffer* ia_buffers[] = { mSpriteVertexBuffer };
-        Uint32 ia_strides[] = { sizeof(SpriteVertex) };
         Uint32 ia_offsets[] = { 0 };
-        mDeviceCtxt->SetVertexBuffers(0, 1, ia_buffers, ia_strides, ia_offsets, 0);
+        mDeviceCtxt->SetVertexBuffers(0, 1, ia_buffers, ia_offsets, 0);
 
         // Draw
         UINT vertexStart = 0;
@@ -838,7 +868,6 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
                     mDeviceCtxt->CommitShaderResources(mSpriteSRB, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
                 }
                 DrawAttribs DrawAttrs;
-                DrawAttrs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
                 DrawAttrs.NumVertices = controlVertices[1+i];
                 DrawAttrs.StartVertexLocation = vertexStart;
                 mDeviceCtxt->Draw(DrawAttrs);

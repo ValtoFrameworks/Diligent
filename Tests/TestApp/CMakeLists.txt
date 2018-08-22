@@ -22,6 +22,11 @@ if(NOT D3D12_SUPPORTED)
     list(REMOVE_ITEM INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/include/TestCreateObjFromNativeResD3D12.h)
 endif()
 
+if(NOT VULKAN_SUPPORTED)
+    list(REMOVE_ITEM SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/TestCreateObjFromNativeResVK.cpp)
+    list(REMOVE_ITEM INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/include/TestCreateObjFromNativeResVK.h)
+endif()
+
 file(GLOB ASSETS LIST_DIRECTORIES false assets/*.*)
 file(GLOB SHADERS LIST_DIRECTORIES false assets/shaders/*.*)
 file(GLOB CS_TEST_SHADERS LIST_DIRECTORIES false assets/shaders/CSTest/*.*)
@@ -102,6 +107,8 @@ endif()
 
 set_common_target_properties(TestApp)
 target_include_directories(TestApp
+PRIVATE
+    ../../DiligentCore/External/vulkan
 PUBLIC
     include
 )
@@ -125,6 +132,9 @@ if(PLATFORM_WIN32)
     )
     if(D3D12_SUPPORTED)
         list(APPEND ENGINE_LIBRARIES GraphicsEngineD3D12-shared)
+    endif()
+    if(VULKAN_SUPPORTED)
+        list(APPEND ENGINE_LIBRARIES GraphicsEngineVk-shared)
     endif()
 elseif(PLATFORM_ANDROID)
     SET(ENGINE_LIBRARIES
@@ -153,7 +163,7 @@ endif()
 
 target_link_libraries(TestApp 
 PRIVATE 
-    BuildSettings 
+    BuildSettings
 PUBLIC
     NativeAppBase
     Common 

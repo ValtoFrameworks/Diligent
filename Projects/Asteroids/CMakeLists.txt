@@ -124,6 +124,13 @@ PRIVATE
     shcore.lib
 )
 
+if(VULKAN_SUPPORTED)
+    target_link_libraries(Asteroids
+    PRIVATE
+        GraphicsEngineVk-shared
+    )
+endif()
+
 set_common_target_properties(Asteroids)
 
 if(MSVC)

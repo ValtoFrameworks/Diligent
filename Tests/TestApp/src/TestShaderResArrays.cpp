@@ -32,7 +32,7 @@
 
 using namespace Diligent;
 
-TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext *pDeviceContext, bool bUseOpenGL, float fMinXCoord, float fMinYCoord, float fXExtent, float fYExtent) :
+TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext *pDeviceContext, ISwapChain *pSwapChain, float fMinXCoord, float fMinYCoord, float fXExtent, float fYExtent) :
     UnitTestBase("Shader resource array test")
 {
     m_pRenderDevice = pDevice;
@@ -80,11 +80,13 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
     PSODesc.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
     PSODesc.GraphicsPipeline.BlendDesc.IndependentBlendEnable = False;
     PSODesc.GraphicsPipeline.BlendDesc.RenderTargets[0].BlendEnable = False;
-    PSODesc.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_RGBA8_UNORM_SRGB;
     PSODesc.GraphicsPipeline.NumRenderTargets = 1;
+    PSODesc.GraphicsPipeline.RTVFormats[0] = pSwapChain->GetDesc().ColorBufferFormat;
+    PSODesc.GraphicsPipeline.DSVFormat = pSwapChain->GetDesc().DepthBufferFormat;
     PSODesc.GraphicsPipeline.pVS = pVS;
     PSODesc.GraphicsPipeline.pPS = pPS;
 
+    PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     LayoutElement Elems[] =
     {
         LayoutElement( 0, 0, 3, Diligent::VT_FLOAT32, false, 0 ),
@@ -180,12 +182,10 @@ void TestShaderResArrays::Draw()
     m_pDeviceContext->CommitShaderResources(m_pSRB, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
     
     IBuffer *pBuffs[] = {m_pVertexBuff};
-    Uint32 Strides[] = {sizeof(float)*5};
     Uint32 Offsets[] = {0};
-    m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Strides, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
+    m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
 
     Diligent::DrawAttribs DrawAttrs;
-    DrawAttrs.Topology = Diligent::PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     DrawAttrs.NumVertices = 4; // Draw quad
     m_pDeviceContext->Draw( DrawAttrs );
     

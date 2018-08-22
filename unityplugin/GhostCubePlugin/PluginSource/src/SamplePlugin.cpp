@@ -49,7 +49,7 @@ SamplePlugin::SamplePlugin(Diligent::IRenderDevice *pDevice, bool UseReverseZ, T
         PSODesc.GraphicsPipeline.NumRenderTargets = 1;
         PSODesc.GraphicsPipeline.RTVFormats[0] = RTVFormat;
         PSODesc.GraphicsPipeline.DSVFormat = DSVFormat;
-        PSODesc.GraphicsPipeline.PrimitiveTopologyType = PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         PSODesc.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_BACK;
         PSODesc.GraphicsPipeline.RasterizerDesc.FrontCounterClockwise = deviceType == DeviceType::D3D11 || deviceType == DeviceType::D3D12 ? true : false;
         PSODesc.GraphicsPipeline.DepthStencilDesc.DepthFunc = UseReverseZ ? COMPARISON_FUNC_GREATER_EQUAL : COMPARISON_FUNC_LESS_EQUAL;
@@ -156,10 +156,9 @@ void SamplePlugin::Render(Diligent::IDeviceContext *pContext, const float4x4 &Vi
         *CBConstants = transposeMatrix(ViewProjMatrix);
     }
 
-    Uint32 stride = sizeof(float) * 7;
     Uint32 offset = 0;
     IBuffer *pBuffs[] = {m_CubeVertexBuffer};
-    pContext->SetVertexBuffers(0, 1, pBuffs, &stride, &offset, SET_VERTEX_BUFFERS_FLAG_RESET);
+    pContext->SetVertexBuffers(0, 1, pBuffs, &offset, SET_VERTEX_BUFFERS_FLAG_RESET);
     pContext->SetIndexBuffer(m_CubeIndexBuffer, 0);
 
     pContext->SetPipelineState(m_PSO);
@@ -169,6 +168,5 @@ void SamplePlugin::Render(Diligent::IDeviceContext *pContext, const float4x4 &Vi
     DrawAttrs.IsIndexed = true;
     DrawAttrs.IndexType = VT_UINT32;
     DrawAttrs.NumIndices = 36;
-    DrawAttrs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     pContext->Draw(DrawAttrs);
 }

@@ -41,7 +41,9 @@ AsteroidsD3D12::Asteroids* gWorkloadD3D12 = nullptr;
 AsteroidsDE::Asteroids*    gWorkloadDE = nullptr;
 bool gd3d11Available = false;
 bool gd3d12Available = false;
+bool gVulkanAvailable = false;
 Settings::RenderMode gLastFrameRenderMode = static_cast<Settings::RenderMode>(-1);
+bool gUpdateWorkload = false;
 
 GUI gGUI;
 GUIText* gFPSControl;
@@ -130,15 +132,15 @@ LRESULT CALLBACK WindowProc(
 {
     switch (message) {
         case WM_DESTROY:
-            PostQuitMessage(0);
+            // If all workloads are null, we are recreating the window
+            // and should not post quit message
+            if(gWorkloadD3D11 || gWorkloadD3D12 || gWorkloadDE)
+                PostQuitMessage(0);
             return 0;
 
         case WM_SIZE: {
             UINT ww = LOWORD(lParam);
             UINT wh = HIWORD(lParam);
-
-            // Ignore resizing to minimized
-            if (ww == 0 || wh == 0) return 0;
 
             gSettings.windowWidth = (int)ww;
             gSettings.windowHeight = (int)wh;
@@ -146,25 +148,28 @@ LRESULT CALLBACK WindowProc(
             gSettings.renderHeight = (UINT)(double(gSettings.windowHeight) * gSettings.renderScale);
 
             // Update camera projection
-            float aspect = (float)gSettings.renderWidth / (float)gSettings.renderHeight;
-            gCamera.Projection(XM_PIDIV2 * 0.8f * 3 / 2, aspect);
+            if(gSettings.renderWidth !=0 && gSettings.renderHeight !=0)
+            {
+                float aspect = (float)gSettings.renderWidth / (float)gSettings.renderHeight;
+                gCamera.Projection(XM_PIDIV2 * 0.8f * 3 / 2, aspect);
+            }
 
             // Resize currently active swap chain
             switch (gSettings.mode)
             {
                 case Settings::RenderMode::NativeD3D11: 
-                    if(gWorkloadD3D11)
+                    if(gWorkloadD3D11 && gSettings.renderWidth !=0 && gSettings.renderHeight !=0)
                         gWorkloadD3D11->ResizeSwapChain(gDXGIFactory, hWnd, gSettings.renderWidth, gSettings.renderHeight); 
                 break;
 
                 case Settings::RenderMode::NativeD3D12: 
-                    if(gWorkloadD3D12)
+                    if(gWorkloadD3D12 && gSettings.renderWidth !=0 && gSettings.renderHeight !=0)
                         gWorkloadD3D12->ResizeSwapChain(gDXGIFactory, hWnd, gSettings.renderWidth, gSettings.renderHeight); 
                 break;
 
                 case Settings::RenderMode::DiligentD3D11:
                 case Settings::RenderMode::DiligentD3D12:
-                case Settings::RenderMode::DiligentGL:
+                case Settings::RenderMode::DiligentVulkan:
                     if(gWorkloadDE)
                         gWorkloadDE->ResizeSwapChain(hWnd, gSettings.renderWidth, gSettings.renderHeight);
                 break;
@@ -202,28 +207,28 @@ LRESULT CALLBACK WindowProc(
                 std::cout << "Submit Rendering: " << gSettings.submitRendering << std::endl;
                 return 0;
             case 'B':
-                if (gSettings.mode == Settings::RenderMode::DiligentD3D12) {
+                if (gSettings.mode == Settings::RenderMode::DiligentD3D12 || gSettings.mode == Settings::RenderMode::DiligentVulkan) {
                     gSettings.resourceBindingMode = (gSettings.resourceBindingMode + 1) % 3;
-                    gLastFrameRenderMode = static_cast<Settings::RenderMode>(-1);
+                    gUpdateWorkload = true;
                 }
                 return 0;
 
             case VK_ADD:
             case VK_OEM_PLUS:
                 gSettings.numThreads = std::min(gSettings.numThreads+1, 16);
-                gLastFrameRenderMode = static_cast<Settings::RenderMode>(-1);
+                gUpdateWorkload = true;
                 return 0;
             case VK_SUBTRACT:
             case VK_OEM_MINUS:
                 gSettings.numThreads = std::max(gSettings.numThreads-1, 2);
-                gLastFrameRenderMode = static_cast<Settings::RenderMode>(-1);
+                gUpdateWorkload = true;
                 return 0;
 
             case '1': gSettings.mode = gd3d11Available ? Settings::RenderMode::NativeD3D11 : gSettings.mode; return 0;
             case '2': gSettings.mode = gd3d12Available ? Settings::RenderMode::NativeD3D12 : gSettings.mode; return 0;
             case '3': gSettings.mode = gd3d11Available ? Settings::RenderMode::DiligentD3D11 : gSettings.mode; return 0;
             case '4': gSettings.mode = gd3d12Available ? Settings::RenderMode::DiligentD3D12 : gSettings.mode; return 0;
-            // '5': gSettings.mode = Settings::RenderMode::DiligentGL; return 0;
+            case '5': gSettings.mode = gVulkanAvailable ? Settings::RenderMode::DiligentVulkan : gSettings.mode; return 0;
 
             case VK_ESCAPE:
                 SendMessage(hWnd, WM_CLOSE, 0, 0);
@@ -238,6 +243,7 @@ LRESULT CALLBACK WindowProc(
             }
             switch (wParam) {
             case VK_RETURN:
+                gSettings.windowed = !gSettings.windowed;
                 ToggleFullscreen(hWnd);
                 break;
             }
@@ -278,6 +284,14 @@ LRESULT CALLBACK WindowProc(
             }
             return 0;
         }
+                           
+        case WM_GETMINMAXINFO:
+        {
+            LPMINMAXINFO lpMMI = (LPMINMAXINFO)lParam;
+            lpMMI->ptMinTrackSize.x = 320;
+            lpMMI->ptMinTrackSize.y = 240;
+            return 0;
+        }
 
         default:
             return DefWindowProc(hWnd, message, wParam, lParam);
@@ -286,12 +300,6 @@ LRESULT CALLBACK WindowProc(
 
 int InitWorkload(HWND hWnd, AsteroidsSimulation &asteroids)
 {
-    delete gWorkloadD3D11;
-    gWorkloadD3D11 = nullptr;
-    delete gWorkloadD3D12;
-    gWorkloadD3D12 = nullptr;
-    delete gWorkloadDE;
-    gWorkloadDE = nullptr;
     switch (gSettings.mode)
     {
         case Settings::RenderMode::NativeD3D11: 
@@ -338,12 +346,47 @@ int InitWorkload(HWND hWnd, AsteroidsSimulation &asteroids)
             gWorkloadDE = new AsteroidsDE::Asteroids(gSettings, &asteroids, &gGUI, hWnd, Diligent::DeviceType::D3D12);
         break;
 
-        case Settings::RenderMode::DiligentGL:
-            gWorkloadDE = new AsteroidsDE::Asteroids(gSettings, &asteroids, &gGUI, hWnd, Diligent::DeviceType::OpenGL);
+        case Settings::RenderMode::DiligentVulkan:
+            gWorkloadDE = new AsteroidsDE::Asteroids(gSettings, &asteroids, &gGUI, hWnd, Diligent::DeviceType::Vulkan);
         break;
     }
 
     return 0;
+}
+
+void CreateDemoWindow(HWND& hWnd)
+{
+    RECT windowRect = { 100, 100, gSettings.windowWidth, gSettings.windowHeight };
+    if(hWnd)
+    {
+        GetWindowRect(hWnd, &windowRect);
+        DestroyWindow(hWnd);
+    }
+    else
+    {
+        AdjustWindowRect(&windowRect, windowedStyle, FALSE);
+    }
+
+    // create the window and store a handle to it
+    hWnd = CreateWindowEx(
+        WS_EX_APPWINDOW,
+        "AsteroidsDemoWndClass",
+        "Asteroids",
+        windowedStyle,
+        windowRect.left,
+        windowRect.top,
+        windowRect.right - windowRect.left,
+        windowRect.bottom - windowRect.top,
+        NULL,
+        NULL,
+        GetModuleHandle(NULL),
+        NULL);
+
+    if (!gSettings.windowed) {
+        ToggleFullscreen(hWnd);
+    }
+
+    SetForegroundWindow(hWnd);
 }
 
 int main(int argc, char** argv)
@@ -354,6 +397,9 @@ int main(int argc, char** argv)
     
     gd3d11Available = CheckDll("d3d11.dll");
     gd3d12Available = CheckDll("d3d12.dll");
+#if VULKAN_SUPPORTED
+    gVulkanAvailable = CheckDll("vulkan-1.dll");
+#endif
 
     // Must be done before any windowing-system-like things or else virtualization will kick in
     auto dpi = SetupDPI();
@@ -425,8 +471,12 @@ int main(int argc, char** argv)
 
     AsteroidsSimulation asteroids(1337, NUM_ASTEROIDS, NUM_UNIQUE_MESHES, MESH_MAX_SUBDIV_LEVELS, NUM_UNIQUE_TEXTURES);
 
-    
-    gSettings.mode = Settings::RenderMode::DiligentD3D12;
+    if (gVulkanAvailable)
+        gSettings.mode = Settings::RenderMode::DiligentVulkan;
+    else if (gd3d12Available)
+        gSettings.mode = Settings::RenderMode::DiligentD3D12;
+    else
+        gSettings.mode = Settings::RenderMode::DiligentD3D11;
 
 
     // init window class
@@ -437,32 +487,10 @@ int main(int argc, char** argv)
     windowClass.lpfnWndProc = WindowProc;
     windowClass.hInstance = GetModuleHandle(NULL);
     windowClass.hCursor = LoadCursor(NULL, IDC_ARROW);
-    windowClass.lpszClassName = "AsteroidsD3D12WindowClass";
+    windowClass.lpszClassName = "AsteroidsDemoWndClass";
     RegisterClassEx(&windowClass);
 
-    RECT windowRect = { 0, 0, gSettings.windowWidth, gSettings.windowHeight };
-    AdjustWindowRect(&windowRect, windowedStyle, FALSE);
-
-    // create the window and store a handle to it
-    auto hWnd = CreateWindowEx(
-        WS_EX_APPWINDOW,
-        "AsteroidsD3D12WindowClass",
-        "Asteroids",
-        windowedStyle,
-        0, // CW_USE_DEFAULT
-        0, // CW_USE_DEFAULT
-        windowRect.right - windowRect.left,
-        windowRect.bottom - windowRect.top,
-        NULL,
-        NULL,
-        windowClass.hInstance,
-        NULL);
-
-    if (!gSettings.windowed) {
-        ToggleFullscreen(hWnd);
-    }
-
-    SetForegroundWindow(hWnd);
+    HWND hWnd = NULL;
 
     // Initialize performance counters
     UINT64 perfCounterFreq = 0;
@@ -501,9 +529,20 @@ int main(int argc, char** argv)
         }
 
         // If we swap to a new API we need to recreate swap chains
-        if (gLastFrameRenderMode != gSettings.mode) {
+        if (gLastFrameRenderMode != gSettings.mode || gUpdateWorkload) {
+            // Delete workload first so that the window does not
+            // post quit message to the queue
+            delete gWorkloadD3D11;
+            gWorkloadD3D11 = nullptr;
+            delete gWorkloadD3D12;
+            gWorkloadD3D12 = nullptr;
+            delete gWorkloadDE;
+            gWorkloadDE = nullptr;
+            if (hWnd == NULL || gLastFrameRenderMode != gSettings.mode)
+                CreateDemoWindow(hWnd);
             InitWorkload(hWnd, asteroids);
             gLastFrameRenderMode = gSettings.mode;
+            gUpdateWorkload = false;
         }
 
         // Still need to process inertia even when no interaction is happening
@@ -549,7 +588,8 @@ int main(int argc, char** argv)
                 break;
 
                 case Settings::RenderMode::DiligentD3D12:
-                    ModeStr = "Diligent D3D12";
+                case Settings::RenderMode::DiligentVulkan:
+                    ModeStr = gSettings.mode == Settings::RenderMode::DiligentD3D12 ? "Diligent D3D12" : "Diligent Vk";
                     gWorkloadDE->GetPerfCounters(updateTime, renderTime);
                     switch (gSettings.resourceBindingMode)
                     {
@@ -557,11 +597,6 @@ int main(int argc, char** argv)
                         case 1: resBindModeStr = "-m";break;
                         case 2: resBindModeStr = "-tm";break;
                     }
-                break;
-
-                case Settings::RenderMode::DiligentGL:
-                    ModeStr = "Diligent GL";
-                    gWorkloadDE->GetPerfCounters(updateTime, renderTime);
                 break;
             }
 
@@ -598,7 +633,7 @@ int main(int argc, char** argv)
 
             case Settings::RenderMode::DiligentD3D11:
             case Settings::RenderMode::DiligentD3D12:
-            case Settings::RenderMode::DiligentGL:
+            case Settings::RenderMode::DiligentVulkan:
                 if(gWorkloadDE)
                     gWorkloadDE->Render((float)frameTime, gCamera, gSettings);
             break;

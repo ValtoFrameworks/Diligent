@@ -13,7 +13,7 @@ TestSampler = Sampler.Create{
     MaxLOD = 10,
     MaxAnisotropy = 6,
     ComparisonFunc = "COMPARISON_FUNC_GREATER_EQUAL",
-    BorderColor = {r = 0.1, g = 0.2, b=0.3, a=0.4},
+    BorderColor = {r = 0.0, g = 0.0, b=0.0, a=1.0},
 }
 
 ErrorTestSampler = Sampler.Create
@@ -81,11 +81,11 @@ PSO = PipelineState.Create
 			{ InputIndex = 0, BufferSlot = 0, NumComponents = 3, ValueType = "VT_FLOAT32", IsNormalized = false},
 			{ InputIndex = 1, BufferSlot = 1, NumComponents = 4, ValueType = "VT_UINT8",   IsNormalized = true},
 		},
-		PrimitiveTopologyType = "PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE",
+		PrimitiveTopology = "PRIMITIVE_TOPOLOGY_TRIANGLE_LIST",
 		pVS = MinimalVS,
 		pPS = UniformBufferPS,
-		RTVFormats = "TEX_FORMAT_RGBA8_UNORM_SRGB",
-		DSVFormat = "TEX_FORMAT_D32_FLOAT",
+		RTVFormats = extBackBufferFormat,
+		DSVFormat = extDepthBufferFormat
 	},
 	SRBAllocationGranularity = 16
 }
@@ -115,15 +115,15 @@ PSOInst = PipelineState.Create
 		},
 		InputLayout = 
 		{
-			{ InputIndex = 0, BufferSlot = 0, NumComponents = 3, ValueType = "VT_FLOAT32", IsNormalized = false},
-			{ InputIndex = 1, BufferSlot = 1, NumComponents = 4, ValueType = "VT_UINT8",   IsNormalized = true},
-			{ InputIndex = 2, BufferSlot = 2, NumComponents = 2, ValueType = "VT_FLOAT32", IsNormalized = false, Frequency = "FREQUENCY_PER_INSTANCE"},
+			{ InputIndex = 0, BufferSlot = 0, NumComponents = 3, ValueType = "VT_FLOAT32", IsNormalized = false, Stride = 4*3},
+			{ InputIndex = 1, BufferSlot = 1, NumComponents = 4, ValueType = "VT_UINT8",   IsNormalized = true, Stride = 4*1},
+			{ InputIndex = 2, BufferSlot = 2, NumComponents = 2, ValueType = "VT_FLOAT32", IsNormalized = false, Frequency = "FREQUENCY_PER_INSTANCE", Stride = 0},
 		},
-		PrimitiveTopologyType = "PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE",
+		PrimitiveTopology = "PRIMITIVE_TOPOLOGY_TRIANGLE_LIST",
 		pVS = MinimalInstVS,
 		pPS = UniformBufferPS,
-		RTVFormats = "TEX_FORMAT_RGBA8_UNORM_SRGB",
-		DSVFormat = "TEX_FORMAT_D32_FLOAT",
+		RTVFormats = extBackBufferFormat,
+		DSVFormat = extDepthBufferFormat
 	}
 }
 SRBInst = PSOInst:CreateShaderResourceBinding()
@@ -179,16 +179,14 @@ UnfiformBuffer1 = Buffer.Create(
 )
 
 DrawAttrs1 = DrawAttribs.Create{
-    NumVertices = 3,
-    Topology = "PRIMITIVE_TOPOLOGY_TRIANGLE_LIST"
+    NumVertices = 3
 }
 
 DrawAttrs2 = DrawAttribs.Create{
     IsIndexed = true,
     NumIndices = 3,
     IndexType = "VT_UINT32",
-    NumInstances = 3,
-    Topology = "PRIMITIVE_TOPOLOGY_TRIANGLE_LIST"
+    NumInstances = 3
 }
 
 ResMapping = ResourceMapping.Create{
@@ -211,14 +209,14 @@ function DrawTris(DrawAttrs)
 	
 	if( DrawAttrs.NumInstances == 1 ) then
 		Context.SetPipelineState(PSO)
-		Context.SetVertexBuffers(0, VertexBuffer1, 0, 4*3, ColorsBuffer1, 0, 1*4, "SET_VERTEX_BUFFERS_FLAG_RESET")
+		Context.SetVertexBuffers(0, VertexBuffer1, 0, ColorsBuffer1, 0, "SET_VERTEX_BUFFERS_FLAG_RESET")
 		SRB:BindResources({"SHADER_TYPE_VERTEX", "SHADER_TYPE_PIXEL"}, ResMapping, {"BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED", "BIND_SHADER_RESOURCES_ALL_RESOLVED"})
 		Context.TransitionShaderResources(PSO)
 		Context.CommitShaderResources()
 		Context.Draw(DrawAttrs)
 	else
 		Context.SetPipelineState(PSOInst)
-		Context.SetVertexBuffers(0, VertexBuffer2, ColorsBuffer2, 0, 1*4, InstanceBuffer, 0, "SET_VERTEX_BUFFERS_FLAG_RESET")
+		Context.SetVertexBuffers(0, VertexBuffer2, ColorsBuffer2, 0, InstanceBuffer, 0, "SET_VERTEX_BUFFERS_FLAG_RESET")
 		Context.SetIndexBuffer(IndexBuffer)
 		SRBInst:BindResources({"SHADER_TYPE_VERTEX", "SHADER_TYPE_PIXEL"}, ResMapping, {"BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED", "BIND_SHADER_RESOURCES_ALL_RESOLVED"})
 		Context.TransitionShaderResources(PSOInst)

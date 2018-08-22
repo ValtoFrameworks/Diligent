@@ -72,6 +72,9 @@ public:
         UNEXPECTED("Windowed mode cannot be set through the proxy swap chain");
     }
 
+    virtual ITextureView* GetCurrentBackBufferRTV()override final{return nullptr;}
+    virtual ITextureView* GetDepthBufferDSV()override final{return nullptr;}
+
 private:
     ID3D11RenderTargetView *m_pRTV = nullptr;
     ID3D11DepthStencilView *m_pDSV = nullptr;
@@ -122,12 +125,12 @@ void DiligentGraphicsAdapterD3D11::BeginFrame()
     auto Width = UnityGraphicsD3D11Impl->GetBackBufferWidth();
     auto Height = UnityGraphicsD3D11Impl->GetBackBufferHeight();
     VERIFY_EXPR(pRTV != nullptr && pDSV != nullptr && Width != 0 && Height != 0);
-    ValidatedCast<ProxySwapChainD3D11>(m_pProxySwapChain.RawPtr())->SetSwapChainAttribs(pRTV, pDSV, Width, Height);
+    m_pProxySwapChain.RawPtr<ProxySwapChainD3D11>()->SetSwapChainAttribs(pRTV, pDSV, Width, Height);
 }
     
 void DiligentGraphicsAdapterD3D11::EndFrame()
 {
-    ValidatedCast<ProxySwapChainD3D11>(m_pProxySwapChain.RawPtr())->ResetSwapChainAttribs();
+    m_pProxySwapChain.RawPtr<ProxySwapChainD3D11>()->ResetSwapChainAttribs();
     m_pDeviceCtx->InvalidateState();
 }
 

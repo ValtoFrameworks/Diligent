@@ -54,6 +54,9 @@ public:
         return m_UnityGraphicsGL.GetGraphicsImpl()->GetDefaultFBO();
     }
     
+    virtual ITextureView* GetCurrentBackBufferRTV()override final{return nullptr;}
+    virtual ITextureView* GetDepthBufferDSV()override final{return nullptr;}
+
 private:
     const UnityGraphicsGLCoreES_Emulator& m_UnityGraphicsGL;
 };
@@ -109,7 +112,7 @@ void DiligentGraphicsAdapterGL::BeginFrame()
     auto *UnityGraphicsGLImpl = m_UnityGraphicsGL.GetGraphicsImpl();
     Uint32 Width = UnityGraphicsGLImpl->GetBackBufferWidth();
     Uint32 Height = UnityGraphicsGLImpl->GetBackBufferHeight();
-    ValidatedCast<ProxySwapChainGL>(m_pProxySwapChain.RawPtr())->Resize(Width, Height);
+    m_pProxySwapChain.RawPtr<ProxySwapChainGL>()->Resize(Width, Height);
 }
     
 void DiligentGraphicsAdapterGL::EndFrame()

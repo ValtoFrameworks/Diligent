@@ -132,11 +132,13 @@ void TestTexturing::GenerateTextureData(IRenderDevice *pRenderDevice, std::vecto
 }
 
 
-void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext, TEXTURE_FORMAT TexFormat, bool bUseOpenGL, float fMinXCoord, float fMinYCoord, float fXExtent, float fYExtent )
+void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext, ISwapChain *pSwapChain, TEXTURE_FORMAT TexFormat, float fMinXCoord, float fMinYCoord, float fXExtent, float fYExtent )
 {
     m_pRenderDevice = pDevice;
     m_TextureFormat = TexFormat;
     m_pDeviceContext = pDeviceContext;
+    auto DevType = m_pRenderDevice->GetDeviceCaps().DevType;
+    bool bUseGLSL = DevType == DeviceType::OpenGL || DevType == DeviceType::OpenGLES || DevType == DeviceType::Vulkan;
 
     float Vertices[] = 
     {
@@ -167,11 +169,11 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
     ShaderCreationAttribs CreationAttrs;
     BasicShaderSourceStreamFactory BasicSSSFactory;
     CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
-    CreationAttrs.Desc.TargetProfile = bUseOpenGL ? SHADER_PROFILE_GL_4_2 : SHADER_PROFILE_DX_5_0;
+    CreationAttrs.Desc.TargetProfile = bUseGLSL ? SHADER_PROFILE_GL_4_2 : SHADER_PROFILE_DX_5_0;
 
     RefCntAutoPtr<Diligent::IShader> pVS, pPS;
     {
-        CreationAttrs.FilePath = bUseOpenGL ? "Shaders\\TextureTestGL.vsh" : "Shaders\\TextureTestDX.vsh";
+        CreationAttrs.FilePath = bUseGLSL ? "Shaders\\TextureTestGL.vsh" : "Shaders\\TextureTestDX.vsh";
         CreationAttrs.Desc.ShaderType =  SHADER_TYPE_VERTEX;
         m_pRenderDevice->CreateShader( CreationAttrs, &pVS );
     }
@@ -180,9 +182,9 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
                          PixelFormatAttribs.ComponentType == COMPONENT_TYPE_SINT;
     {
         if( bIsIntTexture )
-            CreationAttrs.FilePath = bUseOpenGL ? "Shaders\\TextureIntTestGL.psh" : "Shaders\\TextureIntTestDX.psh";
+            CreationAttrs.FilePath = bUseGLSL ? "Shaders\\TextureIntTestGL.psh" : "Shaders\\TextureIntTestDX.psh";
         else
-            CreationAttrs.FilePath = bUseOpenGL ? "Shaders\\TextureTestGL.psh" : "Shaders\\TextureTestDX.psh";
+            CreationAttrs.FilePath = bUseGLSL ? "Shaders\\TextureTestGL.psh" : "Shaders\\TextureTestDX.psh";
         CreationAttrs.Desc.ShaderType =  SHADER_TYPE_PIXEL;
         
         StaticSamplerDesc StaticSampler;
@@ -250,10 +252,12 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
     PSODesc.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
     PSODesc.GraphicsPipeline.BlendDesc.IndependentBlendEnable = False;
     PSODesc.GraphicsPipeline.BlendDesc.RenderTargets[0].BlendEnable = False;
-    PSODesc.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_RGBA8_UNORM_SRGB;
+    PSODesc.GraphicsPipeline.RTVFormats[0] = pSwapChain->GetDesc().ColorBufferFormat;
+    PSODesc.GraphicsPipeline.DSVFormat = pSwapChain->GetDesc().DepthBufferFormat;
     PSODesc.GraphicsPipeline.NumRenderTargets = 1;
     PSODesc.GraphicsPipeline.pVS = pVS;
     PSODesc.GraphicsPipeline.pPS = pPS;
+    PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 
     LayoutElement Elems[] =
     {
@@ -277,15 +281,13 @@ void TestTexturing::Draw()
 {
     m_pDeviceContext->SetPipelineState(m_pPSO);
     m_pDeviceContext->TransitionShaderResources(m_pPSO, nullptr);
-    m_pDeviceContext->CommitShaderResources(nullptr, 0);
+    m_pDeviceContext->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_VERIFY_STATES);
     
     IBuffer *pBuffs[] = {m_pVertexBuff};
-    Uint32 Strides[] = {sizeof(float)*5};
     Uint32 Offsets[] = {0};
-    m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Strides, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
+    m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
 
     Diligent::DrawAttribs DrawAttrs;
-    DrawAttrs.Topology = Diligent::PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     DrawAttrs.NumVertices = 4; // Draw quad
     m_pDeviceContext->Draw( DrawAttrs );
     

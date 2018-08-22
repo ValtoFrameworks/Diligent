@@ -21,4 +21,20 @@
  *  of the possibility of such damages.
  */
 
-#include "DiligentCore/Common/interface/AdaptiveFixedBlockAllocator.h"
+#pragma once
+
+#include "TestCreateObjFromNativeRes.h"
+
+class TestCreateObjFromNativeResVK : public TestCreateObjFromNativeRes
+{
+public:
+    TestCreateObjFromNativeResVK(Diligent::IRenderDevice *pDevice) :
+        m_pDevice(pDevice)
+    {}
+
+    virtual void CreateTexture(Diligent::ITexture *pTexture)override final;
+    virtual void CreateBuffer(Diligent::IBuffer *pBuffer)override final;
+
+private:
+    Diligent::RefCntAutoPtr<Diligent::IRenderDevice> m_pDevice;
+};

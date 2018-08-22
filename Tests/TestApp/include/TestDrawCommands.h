@@ -32,7 +32,7 @@ public:
     
     static const int TriGridSize = 16;
 
-    void Init(Diligent::IRenderDevice *pDevice, Diligent::IDeviceContext *pDeviceContext, float fMinXCoord, float fMinYCoord, float fXExtent, float fYExtent);   
+    void Init(Diligent::IRenderDevice *pDevice, Diligent::IDeviceContext *pDeviceContext, Diligent::ISwapChain *pSwapChain, float fMinXCoord, float fMinYCoord, float fXExtent, float fYExtent);   
     void Draw();
 
 private:
@@ -41,7 +41,7 @@ private:
     Diligent::RefCntAutoPtr<Diligent::IRenderDevice> m_pRenderDevice;
     Diligent::RefCntAutoPtr<Diligent::IDeviceContext> m_pDeviceContext;
 
-    Diligent::RefCntAutoPtr<Diligent::IPipelineState> m_pPSO, m_pPSOInst;
+    Diligent::RefCntAutoPtr<Diligent::IPipelineState> m_pPSO, m_pPSO_2xStride, m_pPSOInst;
     Diligent::RefCntAutoPtr<Diligent::IBuffer> m_pVertexBuff, m_pVertexBuff2, m_pIndexBuff, m_pInstanceData, m_pIndirectDrawArgs, m_pIndexedIndirectDrawArgs;
     Diligent::RefCntAutoPtr<Diligent::IResourceMapping> m_pResMapping;
 };

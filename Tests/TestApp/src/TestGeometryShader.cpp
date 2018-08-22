@@ -31,7 +31,7 @@
 
 using namespace Diligent;
 
-void TestGeometryShader::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext)
+void TestGeometryShader::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext, ISwapChain *pSwapChain)
 {
     if(!pDevice->GetDeviceCaps().bGeometryShadersSupported)
     {
@@ -70,12 +70,13 @@ void TestGeometryShader::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceCo
     PSODesc.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
     PSODesc.GraphicsPipeline.BlendDesc.IndependentBlendEnable = False;
     PSODesc.GraphicsPipeline.BlendDesc.RenderTargets[0].BlendEnable = False;
-    PSODesc.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_RGBA8_UNORM_SRGB;
     PSODesc.GraphicsPipeline.NumRenderTargets = 1;
+    PSODesc.GraphicsPipeline.RTVFormats[0] = pSwapChain->GetDesc().ColorBufferFormat;
+    PSODesc.GraphicsPipeline.DSVFormat = pSwapChain->GetDesc().DepthBufferFormat;
     PSODesc.GraphicsPipeline.pPS = pPS;
     PSODesc.GraphicsPipeline.pVS = pVS;
     PSODesc.GraphicsPipeline.pGS = pGS;
-    PSODesc.GraphicsPipeline.PrimitiveTopologyType = PRIMITIVE_TOPOLOGY_TYPE_POINT;
+    PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_POINT_LIST;
     
     pDevice->CreatePipelineState( PSODesc, &m_pPSO );
 }
@@ -89,7 +90,6 @@ void TestGeometryShader::Draw()
     m_pDeviceContext->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
     
     Diligent::DrawAttribs DrawAttrs;
-    DrawAttrs.Topology = Diligent::PRIMITIVE_TOPOLOGY_POINT_LIST;
     DrawAttrs.NumVertices = 2; // Draw 2 triangles
     m_pDeviceContext->Draw(DrawAttrs);
     

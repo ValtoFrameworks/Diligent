@@ -107,10 +107,10 @@ RenderScriptTest::RenderScriptTest( IRenderDevice *pRenderDevice, IDeviceContext
             SamplerDesc.MaxLOD = 4;
             SamplerDesc.MaxAnisotropy = 2;
             SamplerDesc.ComparisonFunc = COMPARISON_FUNC_LESS;
-            SamplerDesc.BorderColor[0] = 1.5f;
-            SamplerDesc.BorderColor[1] = 2.25f;
-            SamplerDesc.BorderColor[2] = 3.125f;
-            SamplerDesc.BorderColor[3] = 4.0625f;
+            SamplerDesc.BorderColor[0] = 0.f;
+            SamplerDesc.BorderColor[1] = 0.f;
+            SamplerDesc.BorderColor[2] = 0.f;
+            SamplerDesc.BorderColor[3] = 1.f;
             RefCntAutoPtr<ISampler> pSampler;
             pRenderDevice->CreateSampler( SamplerDesc, &pSampler );
             pScriptParser->SetGlobalVariable( "TestGlobalSampler", pSampler );
@@ -122,7 +122,6 @@ RenderScriptTest::RenderScriptTest( IRenderDevice *pRenderDevice, IDeviceContext
 
         {
             DrawAttribs GlobalDrawAttribs;
-            GlobalDrawAttribs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
             GlobalDrawAttribs.NumVertices = 123;
             GlobalDrawAttribs.IndexType = VT_UINT16;
             GlobalDrawAttribs.IsIndexed = True;
@@ -176,20 +175,20 @@ RenderScriptTest::RenderScriptTest( IRenderDevice *pRenderDevice, IDeviceContext
         assert( SamplerDesc.MaxLOD == 10 );
         assert( SamplerDesc.MaxAnisotropy == 6 );
         assert( SamplerDesc.ComparisonFunc == COMPARISON_FUNC_GREATER_EQUAL );
-        assert( SamplerDesc.BorderColor[0] == 0.5f );
-        assert( SamplerDesc.BorderColor[1] == 0.25f );
-        assert( SamplerDesc.BorderColor[2] == 0.125f );
-        assert( SamplerDesc.BorderColor[3] == 0.0625f );
+        assert( SamplerDesc.BorderColor[0] == 0.f );
+        assert( SamplerDesc.BorderColor[1] == 0.f );
+        assert( SamplerDesc.BorderColor[2] == 0.f );
+        assert( SamplerDesc.BorderColor[3] == 1.f );
     }
 
     {
         RefCntAutoPtr<ISampler> pTestSampler3;
         pScript->GetSamplerByName( "TestSampler3", &pTestSampler3 );
         const auto &SamplerDesc = pTestSampler3->GetDesc();
-        assert( SamplerDesc.BorderColor[0] == 0.5f * 2.f);
-        assert( SamplerDesc.BorderColor[1] == 0.25f * 2.f );
-        assert( SamplerDesc.BorderColor[2] == 0.125f * 2.f );
-        assert( SamplerDesc.BorderColor[3] == 0.0625f * 2.f );
+        assert( SamplerDesc.BorderColor[0] == 0.f);
+        assert( SamplerDesc.BorderColor[1] == 0.f );
+        assert( SamplerDesc.BorderColor[2] == 0.f );
+        assert( SamplerDesc.BorderColor[3] == 1.f );
     }
 
     {
@@ -208,10 +207,10 @@ RenderScriptTest::RenderScriptTest( IRenderDevice *pRenderDevice, IDeviceContext
         assert( SamplerDesc.MaxLOD == 10 );
         assert( SamplerDesc.MaxAnisotropy == 6 );
         assert( SamplerDesc.ComparisonFunc == COMPARISON_FUNC_GREATER_EQUAL );
-        assert( SamplerDesc.BorderColor[0] == 0.5f );
-        assert( SamplerDesc.BorderColor[1] == 0.25f );
-        assert( SamplerDesc.BorderColor[2] == 0.125f );
-        assert( SamplerDesc.BorderColor[3] == 0.0625f );
+        assert( SamplerDesc.BorderColor[0] == 0.f );
+        assert( SamplerDesc.BorderColor[1] == 0.f );
+        assert( SamplerDesc.BorderColor[2] == 0.f );
+        assert( SamplerDesc.BorderColor[3] == 1.f );
     }
 
 
@@ -219,7 +218,6 @@ RenderScriptTest::RenderScriptTest( IRenderDevice *pRenderDevice, IDeviceContext
         RefCntAutoPtr<ISampler> pTestSampler4;
         pScript->GetSamplerByName( "TestSampler4", &pTestSampler4 );
         const auto &SamDesc = pTestSampler4->GetDesc();
-        assert( strcmp(SamDesc.Name, "") == 0 );
         assert( SamDesc.MinFilter == SamplerDesc().MinFilter );
         assert( SamDesc.MagFilter == SamplerDesc().MagFilter );
         assert( SamDesc.MipFilter == SamplerDesc().MipFilter );
@@ -336,7 +334,6 @@ RenderScriptTest::RenderScriptTest( IRenderDevice *pRenderDevice, IDeviceContext
 
     {
         DrawAttribs DrawAttribs;
-        DrawAttribs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         DrawAttribs.NumVertices = 34;
         DrawAttribs.IndexType = VT_UINT16;
         DrawAttribs.IsIndexed = True;

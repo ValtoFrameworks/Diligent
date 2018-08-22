@@ -38,12 +38,12 @@ TestBufferAccess::TestBufferAccess() :
     m_fYExtent(0)
 {}
 
-void TestBufferAccess::Init( IRenderDevice *pDevice, IDeviceContext *pContext, float fMinXCoord, float fMinYCoord, float fXExtent, float fYExtent )
+void TestBufferAccess::Init( IRenderDevice *pDevice, IDeviceContext *pContext, ISwapChain *pSwapChain, float fMinXCoord, float fMinYCoord, float fXExtent, float fYExtent )
 {
     m_pRenderDevice = pDevice;
     m_pDeviceContext = pContext;
     auto DevType = m_pRenderDevice->GetDeviceCaps().DevType;
-    bool bUseOpenGL = DevType == DeviceType::OpenGL || DevType == DeviceType::OpenGLES;
+    bool bUseGLSL = DevType == DeviceType::OpenGL || DevType == DeviceType::OpenGLES || DevType == DeviceType::Vulkan;
 
     m_fXExtent = fXExtent;
     m_fYExtent = fYExtent;
@@ -115,18 +115,18 @@ void TestBufferAccess::Init( IRenderDevice *pDevice, IDeviceContext *pContext, f
     ShaderCreationAttribs CreationAttrs;
     BasicShaderSourceStreamFactory BasicSSSFactory;
     CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
-    CreationAttrs.Desc.TargetProfile = bUseOpenGL ? SHADER_PROFILE_GL_4_2 : SHADER_PROFILE_DX_5_0;
+    CreationAttrs.Desc.TargetProfile = bUseGLSL ? SHADER_PROFILE_GL_4_2 : SHADER_PROFILE_DX_5_0;
 
     RefCntAutoPtr<Diligent::IShader> pVSInst, pPS;
 
     {
-        CreationAttrs.FilePath = bUseOpenGL ? "Shaders\\minimalInstGL.vsh" : "Shaders\\minimalInstDX.vsh";
+        CreationAttrs.FilePath = bUseGLSL ? "Shaders\\minimalInstGL.vsh" : "Shaders\\minimalInstDX.vsh";
         CreationAttrs.Desc.ShaderType =  SHADER_TYPE_VERTEX;
         m_pRenderDevice->CreateShader( CreationAttrs, &pVSInst );
     }
 
     {
-        CreationAttrs.FilePath = bUseOpenGL ? "Shaders\\minimalGL.psh" : "Shaders\\minimalDX.psh";
+        CreationAttrs.FilePath = bUseGLSL ? "Shaders\\minimalGL.psh" : "Shaders\\minimalDX.psh";
         CreationAttrs.Desc.ShaderType =  SHADER_TYPE_PIXEL;
         m_pRenderDevice->CreateShader( CreationAttrs, &pPS );
     }
@@ -137,19 +137,21 @@ void TestBufferAccess::Init( IRenderDevice *pDevice, IDeviceContext *pContext, f
     PSODesc.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
     PSODesc.GraphicsPipeline.BlendDesc.IndependentBlendEnable = False;
     PSODesc.GraphicsPipeline.BlendDesc.RenderTargets[0].BlendEnable = False;
-    PSODesc.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_RGBA8_UNORM_SRGB;
     PSODesc.GraphicsPipeline.NumRenderTargets = 1;
+    PSODesc.GraphicsPipeline.RTVFormats[0] = pSwapChain->GetDesc().ColorBufferFormat;
+    PSODesc.GraphicsPipeline.DSVFormat = pSwapChain->GetDesc().DepthBufferFormat;
     PSODesc.GraphicsPipeline.pVS = pVSInst;
     PSODesc.GraphicsPipeline.pPS = pPS;
 
     LayoutElement Elems[] =
     {
-        LayoutElement( 0, 0, 3, Diligent::VT_FLOAT32, false, 0 ),
-        LayoutElement( 1, 0, 3, Diligent::VT_FLOAT32, false, sizeof( float ) * 3 ),
-        LayoutElement( 2, 1, 2, Diligent::VT_FLOAT32, false, 0, LayoutElement::FREQUENCY_PER_INSTANCE )
+        LayoutElement( 0, 1, 3, Diligent::VT_FLOAT32, false, 0 ),
+        LayoutElement( 1, 1, 3, Diligent::VT_FLOAT32, false, sizeof( float ) * 3, sizeof( float ) * 6),
+        LayoutElement( 2, 3, 2, Diligent::VT_FLOAT32, false, 0, 0, LayoutElement::FREQUENCY_PER_INSTANCE )
     };
     PSODesc.GraphicsPipeline.InputLayout.LayoutElements = Elems;
     PSODesc.GraphicsPipeline.InputLayout.NumElements = _countof( Elems );
+    PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     pDevice->CreatePipelineState(PSODesc, &m_pPSO);
 }
     
@@ -160,13 +162,11 @@ void TestBufferAccess::Draw(float fTime)
     //m_pDeviceContext->TransitionShaderResources(m_pPSO, nullptr);
     //m_pDeviceContext->CommitShaderResources(nullptr);
 
-    IBuffer *pBuffs[2] = {m_pVertexBuff, m_pInstBuff[0]};
-    Uint32 Strides[] = {sizeof(float)*6, sizeof(float)*2};
-    Uint32 Offsets[] = {0, 0};
-    m_pDeviceContext->SetVertexBuffers( 0, _countof( pBuffs ), pBuffs, Strides, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
+    IBuffer *pBuffs[] = {nullptr, m_pVertexBuff, nullptr, m_pInstBuff[0], nullptr};
+    Uint32 Offsets[_countof( pBuffs )] = {0, 0, 0, 0, 0};
+    m_pDeviceContext->SetVertexBuffers( 0, _countof( pBuffs ), pBuffs, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
     
     Diligent::DrawAttribs DrawAttrs;
-    DrawAttrs.Topology = Diligent::PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     DrawAttrs.NumVertices = 3;
     DrawAttrs.NumInstances = NumInstances;
     m_pDeviceContext->Draw(DrawAttrs);
@@ -183,8 +183,8 @@ void TestBufferAccess::Draw(float fTime)
     }
     m_pInstBuff[1]->UpdateData( m_pDeviceContext, sizeof( float ) * 2, sizeof( float ) * 4, &instance_offsets[2] );
 
-    pBuffs[1] = m_pInstBuff[1];
-    m_pDeviceContext->SetVertexBuffers( 0, _countof( pBuffs ), pBuffs, Strides, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
+    pBuffs[3] = m_pInstBuff[1];
+    m_pDeviceContext->SetVertexBuffers( 0, _countof( pBuffs ), pBuffs, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
     
     m_pDeviceContext->Draw(DrawAttrs);
 
@@ -211,8 +211,8 @@ void TestBufferAccess::Draw(float fTime)
         memcpy(pInstData, instance_offsets, sizeof(instance_offsets));
     }
 
-    pBuffs[1] = m_pInstBuff[3];
-    m_pDeviceContext->SetVertexBuffers( 0, _countof( pBuffs ), pBuffs, Strides, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
+    pBuffs[3] = m_pInstBuff[3];
+    m_pDeviceContext->SetVertexBuffers( 0, _countof( pBuffs ), pBuffs, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
     
     m_pDeviceContext->Draw(DrawAttrs);
 
@@ -244,8 +244,8 @@ void TestBufferAccess::Draw(float fTime)
             }
 
             m_pInstBuff[2]->CopyData( m_pDeviceContext, m_pInstBuff[5], 0, 0, sizeof( instance_offsets ) );
-            pBuffs[1] = m_pInstBuff[2];
-            m_pDeviceContext->SetVertexBuffers( 0, _countof( pBuffs ), pBuffs, Strides, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
+            pBuffs[3] = m_pInstBuff[2];
+            m_pDeviceContext->SetVertexBuffers( 0, _countof( pBuffs ), pBuffs, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
             m_pDeviceContext->Draw(DrawAttrs);
 
 

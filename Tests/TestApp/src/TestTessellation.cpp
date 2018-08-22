@@ -31,7 +31,7 @@
 
 using namespace Diligent;
 
-void TestTessellation::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext)
+void TestTessellation::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext, ISwapChain *pSwapChain)
 {
     if(!pDevice->GetDeviceCaps().bTessellationSupported)
     {
@@ -81,13 +81,14 @@ void TestTessellation::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceCont
     PSODesc.GraphicsPipeline.RasterizerDesc.FillMode = FILL_MODE_WIREFRAME;
     PSODesc.GraphicsPipeline.BlendDesc.IndependentBlendEnable = False;
     PSODesc.GraphicsPipeline.BlendDesc.RenderTargets[0].BlendEnable = False;
-    PSODesc.GraphicsPipeline.RTVFormats[0] = TEX_FORMAT_RGBA8_UNORM_SRGB;
     PSODesc.GraphicsPipeline.NumRenderTargets = 1;
+    PSODesc.GraphicsPipeline.RTVFormats[0] = pSwapChain->GetDesc().ColorBufferFormat;
+    PSODesc.GraphicsPipeline.DSVFormat = pSwapChain->GetDesc().DepthBufferFormat;
     PSODesc.GraphicsPipeline.pPS = pPS;
     PSODesc.GraphicsPipeline.pVS = pVS;
     PSODesc.GraphicsPipeline.pHS = pHS;
     PSODesc.GraphicsPipeline.pDS = pDS;
-    PSODesc.GraphicsPipeline.PrimitiveTopologyType = PRIMITIVE_TOPOLOGY_TYPE_PATCH;
+    PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST;
     
     pDevice->CreatePipelineState( PSODesc, &m_pQuadPSO );
 
@@ -133,7 +134,6 @@ void TestTessellation::Draw()
     m_pDeviceContext->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
     
     Diligent::DrawAttribs DrawAttrs;
-    DrawAttrs.Topology = Diligent::PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST;
     DrawAttrs.NumVertices = 2; // Draw 2 quad patches
     m_pDeviceContext->Draw(DrawAttrs);
 
