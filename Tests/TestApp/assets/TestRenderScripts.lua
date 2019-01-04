@@ -36,6 +36,7 @@ end
 
 MinimalVS = Shader.Create{
 	FilePath =  GetShaderPath("minimal", "vsh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {
 		ShaderType = "SHADER_TYPE_VERTEX",
 		Name = "MinimalVS"
@@ -44,6 +45,7 @@ MinimalVS = Shader.Create{
 
 MinimalInstVS = Shader.Create{
 	FilePath =  GetShaderPath("minimalInst", "vsh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {
 		ShaderType = "SHADER_TYPE_VERTEX",
 		Name = "MinimalInstVS"
@@ -52,6 +54,7 @@ MinimalInstVS = Shader.Create{
 
 UniformBufferPS = Shader.Create{
 	FilePath =  GetShaderPath("UniformBuffer", "psh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {
 		ShaderType = "SHADER_TYPE_PIXEL",
 		Name = "UniformBufferPS"
@@ -178,17 +181,6 @@ UnfiformBuffer1 = Buffer.Create(
       BindFlags = "BIND_UNIFORM_BUFFER", Usage = "USAGE_DYNAMIC", CPUAccessFlags = "CPU_ACCESS_WRITE" }
 )
 
-DrawAttrs1 = DrawAttribs.Create{
-    NumVertices = 3
-}
-
-DrawAttrs2 = DrawAttribs.Create{
-    IsIndexed = true,
-    NumIndices = 3,
-    IndexType = "VT_UINT32",
-    NumInstances = 3
-}
-
 ResMapping = ResourceMapping.Create{
 	{Name = "cbTestBlock", pObject = UnfiformBuffer1}
 }
@@ -202,6 +194,8 @@ function BindShaderResources()
 	MinimalVS:BindResources(ResMapping)
 	MinimalInstVS:BindResources(ResMapping)
 	UniformBufferPS:BindResources(ResMapping)
+    SRB:InitializeStaticResources(PSO)
+    SRBInst:InitializeStaticResources()
 end
 
 
@@ -209,18 +203,18 @@ function DrawTris(DrawAttrs)
 	
 	if( DrawAttrs.NumInstances == 1 ) then
 		Context.SetPipelineState(PSO)
-		Context.SetVertexBuffers(0, VertexBuffer1, 0, ColorsBuffer1, 0, "SET_VERTEX_BUFFERS_FLAG_RESET")
-		SRB:BindResources({"SHADER_TYPE_VERTEX", "SHADER_TYPE_PIXEL"}, ResMapping, {"BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED", "BIND_SHADER_RESOURCES_ALL_RESOLVED"})
-		Context.TransitionShaderResources(PSO)
-		Context.CommitShaderResources()
+		Context.SetVertexBuffers(0, VertexBuffer1, 0, ColorsBuffer1, 0, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION", "SET_VERTEX_BUFFERS_FLAG_RESET")
+		SRB:BindResources({"SHADER_TYPE_VERTEX", "SHADER_TYPE_PIXEL"}, ResMapping, {"BIND_SHADER_RESOURCES_KEEP_EXISTING", "BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED", "BIND_SHADER_RESOURCES_UPDATE_ALL"})
+		Context.TransitionShaderResources(PSO, SRB)
+		Context.CommitShaderResources(SRB)
 		Context.Draw(DrawAttrs)
 	else
 		Context.SetPipelineState(PSOInst)
-		Context.SetVertexBuffers(0, VertexBuffer2, ColorsBuffer2, 0, InstanceBuffer, 0, "SET_VERTEX_BUFFERS_FLAG_RESET")
-		Context.SetIndexBuffer(IndexBuffer)
-		SRBInst:BindResources({"SHADER_TYPE_VERTEX", "SHADER_TYPE_PIXEL"}, ResMapping, {"BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED", "BIND_SHADER_RESOURCES_ALL_RESOLVED"})
-		Context.TransitionShaderResources(PSOInst)
-		Context.CommitShaderResources()
+		Context.SetVertexBuffers(0, VertexBuffer2, ColorsBuffer2, 0, InstanceBuffer, 0, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION", "SET_VERTEX_BUFFERS_FLAG_RESET")
+		Context.SetIndexBuffer(IndexBuffer, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
+		SRBInst:BindResources({"SHADER_TYPE_VERTEX", "SHADER_TYPE_PIXEL"}, ResMapping, {"BIND_SHADER_RESOURCES_KEEP_EXISTING", "BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED", "BIND_SHADER_RESOURCES_UPDATE_MUTABLE", "BIND_SHADER_RESOURCES_UPDATE_DYNAMIC"})
+		Context.TransitionShaderResources(PSOInst, SRBInst)
+		Context.CommitShaderResources(SRBInst)
 		Context.Draw(DrawAttrs)
 	end
 

@@ -131,20 +131,20 @@ Tex2DArr_Slice2DSV = TexDS_2DArr:CreateView{ViewType = "TEXTURE_VIEW_DEPTH_STENC
 Tex2DArr_Slice2Mip2DSV = TexDS_2DArr:CreateView{ViewType = "TEXTURE_VIEW_DEPTH_STENCIL", FirstArraySlice = 2, MostDetailedMip = 2, NumArraySlices = 1}
 
 function SetRTsHelper(RTVs, DSV)
-	Context.SetRenderTargets(RTVs[1])
-	Context.SetRenderTargets(RTVs[1], RTVs[2])
-	Context.SetRenderTargets(RTVs[1], RTVs[2], RTVs[3])
+	Context.SetRenderTargets(RTVs[1], "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
+	Context.SetRenderTargets(RTVs[1], RTVs[2], "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
+	Context.SetRenderTargets(RTVs[1], RTVs[2], RTVs[3], "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
 	if DSV then
-		Context.SetRenderTargets(RTVs[1], RTVs[2], RTVs[3], DSV)
+		Context.SetRenderTargets(RTVs[1], RTVs[2], RTVs[3], DSV, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
 	end
-	Context.ClearRenderTarget(RTVs[1], 0.25, 0.5, 0.75, 1.0)
-	Context.ClearRenderTarget(RTVs[2], 0.25, 0.5, 0.75, 1.0)
-	Context.ClearRenderTarget(RTVs[3], 0.25, 0.5, 0.75, 1.0)
+	Context.ClearRenderTarget(RTVs[1], 0.25, 0.5, 0.75, 1.0, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
+	Context.ClearRenderTarget(RTVs[2], 0.25, 0.5, 0.75, 1.0, "RESOURCE_STATE_TRANSITION_MODE_VERIFY")
+	Context.ClearRenderTarget(RTVs[3], 0.25, 0.5, 0.75, 1.0, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
 	if DSV then
-		Context.ClearDepthStencil(DSV, 1.0)
-		Context.SetRenderTargets(RTVs[1], RTVs[2], DSV)
-		Context.SetRenderTargets(RTVs[1], DSV)
-		Context.SetRenderTargets(DSV)
+		Context.ClearDepthStencil(DSV, "CLEAR_DEPTH_FLAG", 1.0, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
+		Context.SetRenderTargets(RTVs[1], RTVs[2], DSV, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
+		Context.SetRenderTargets(RTVs[1], DSV, "RESOURCE_STATE_TRANSITION_MODE_VERIFY")
+		Context.SetRenderTargets(DSV, "RESOURCE_STATE_TRANSITION_MODE_VERIFY")
 	end
 end
 
@@ -174,8 +174,8 @@ function TestSetRenderTargets()
 	-- It is not allowed to mix different resources as render targets. In particular, we cannot
 	-- bind Texture2D & Texture3D at the same time
 	if not IsGLES then
-		Context.SetRenderTargets(Tex2D_DefRTV[3], Tex2DArr_Slice2RTV[1], Tex2DArr_Slice2DSV)
-		Context.SetRenderTargets(Tex2DArr_Slice2Mip2RTV[1], Tex2DArr_Slice2Mip2DSV)
+		Context.SetRenderTargets(Tex2D_DefRTV[3], Tex2DArr_Slice2RTV[1], Tex2DArr_Slice2DSV, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
+		Context.SetRenderTargets(Tex2DArr_Slice2Mip2RTV[1], Tex2DArr_Slice2Mip2DSV, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
 	end
 end
 
@@ -274,24 +274,27 @@ end
 
 QuadVS = Shader.Create{
 	FilePath =  GetShaderPath("RTTest\\QuadVS"),
+    UseCombinedTextureSamplers = true,
 	Desc = {ShaderType = "SHADER_TYPE_VERTEX"}
 }
 
 
 RenderToTexturesPS = Shader.Create{
 	FilePath =  GetShaderPath("RTTest\\RenderToTexturesPS"),
+    UseCombinedTextureSamplers = true,
 	Desc = {ShaderType = "SHADER_TYPE_PIXEL"}
 }
 
 BlendTexturesPS = Shader.Create{
 	FilePath =  GetShaderPath("RTTest\\BlendTexturesPS"),
+    UseCombinedTextureSamplers = true,
 	Desc = 
 	{
 		ShaderType = "SHADER_TYPE_PIXEL",
 		StaticSamplers = 
 		{
 			{
-				TextureName = "g_tex2DTest0",
+				SamplerOrTextureName = "g_tex2DTest0",
 				Desc = 
 				{
 					MinFilter = "FILTER_TYPE_LINEAR", 
@@ -301,7 +304,7 @@ BlendTexturesPS = Shader.Create{
 				}
 			},
 			{
-				TextureName = "g_tex2DTest2",
+				SamplerOrTextureName = "g_tex2DTest2",
 				Desc = 
 				{
 					MinFilter = "FILTER_TYPE_LINEAR", 
@@ -314,7 +317,7 @@ BlendTexturesPS = Shader.Create{
 	}
 }
 assert(BlendTexturesPS.Desc.StaticSamplers[1].Desc.MipFilter == "FILTER_TYPE_POINT");
-assert(BlendTexturesPS.Desc.StaticSamplers[2].TextureName == "g_tex2DTest2");
+assert(BlendTexturesPS.Desc.StaticSamplers[2].SamplerOrTextureName == "g_tex2DTest2");
 
 QuadVS:BindResources(ResMapping)
 RenderToTexturesPS:BindResources(ResMapping)
@@ -344,7 +347,7 @@ RenderToTexPSO = PipelineState.Create
         PrimitiveTopology = "PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP"
 	}
 }
-
+RenderToTexSRB = RenderToTexPSO:CreateShaderResourceBinding(true)
 
 BlendTexPSO = PipelineState.Create
 {
@@ -369,9 +372,11 @@ BlendTexPSO = PipelineState.Create
         PrimitiveTopology = "PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP"
 	}
 }
+BlendTexSRB = BlendTexPSO:CreateShaderResourceBinding(true)
 
 DrawAttrs = DrawAttribs.Create{
-	NumVertices = 4
+	NumVertices = 4,
+    Flags = "DRAW_FLAG_VERIFY_STATES"
 }
 
 VP = Viewport.Create { 
@@ -393,41 +398,41 @@ SR = ScissorRect.Create
 
 
 function RenderToTextures()
-	Context.SetVertexBuffers(FullQuadBuffer, TexcoordBuffer, "SET_VERTEX_BUFFERS_FLAG_RESET")
+	Context.SetVertexBuffers(FullQuadBuffer, TexcoordBuffer, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION", "SET_VERTEX_BUFFERS_FLAG_RESET")
 	Context.SetPipelineState(RenderToTexPSO)
-	Context.TransitionShaderResources(RenderToTexPSO)
-	Context.CommitShaderResources()
+	Context.TransitionShaderResources(RenderToTexPSO, RenderToTexSRB)
+	Context.CommitShaderResources(RenderToTexSRB)
 	Context.Draw(DrawAttrs)
 end
 
 function BlendTextures()
-	Context.SetVertexBuffers(ScaledQuadBuffer, TexcoordBuffer, "SET_VERTEX_BUFFERS_FLAG_RESET")
+	Context.SetVertexBuffers(ScaledQuadBuffer, TexcoordBuffer, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION", "SET_VERTEX_BUFFERS_FLAG_RESET")
 	Context.SetPipelineState(BlendTexPSO)
-	Context.CommitShaderResources("COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES")
+	Context.CommitShaderResources(BlendTexSRB, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
 	Context.Draw(DrawAttrs)
 end
 
 function Render()
 	TestSetRenderTargets()
 	
-	Context.SetRenderTargets(Tex0RTV)				  -- To test FBO cache
-	Context.SetRenderTargets(Tex1RTV)				  -- To test FBO cache
-	Context.SetRenderTargets(TexDepthTexDSV)		  -- To test FBO cache
-	Context.SetRenderTargets(Tex0RTV, TexDepthTexDSV) -- To test FBO cache
-	Context.SetRenderTargets(Tex1RTV, TexDepthTexDSV) -- To test FBO cache
-	Context.SetRenderTargets(Tex0RTV, Tex1RTV, TexDepthTexDSV) -- To test FBO cache
+	Context.SetRenderTargets(Tex0RTV, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")	                    -- To test FBO cache
+	Context.SetRenderTargets(Tex1RTV, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")		                    -- To test FBO cache
+	Context.SetRenderTargets(TexDepthTexDSV, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")		        -- To test FBO cache
+	Context.SetRenderTargets(Tex0RTV, TexDepthTexDSV, "RESOURCE_STATE_TRANSITION_MODE_VERIFY")          -- To test FBO cache
+	Context.SetRenderTargets(Tex1RTV, TexDepthTexDSV, "RESOURCE_STATE_TRANSITION_MODE_VERIFY")          -- To test FBO cache
+	Context.SetRenderTargets(Tex0RTV, Tex1RTV, TexDepthTexDSV, "RESOURCE_STATE_TRANSITION_MODE_VERIFY") -- To test FBO cache
 
 
-	Context.SetRenderTargets(Tex2RTV)		  
-	Context.ClearRenderTarget(Tex2RTV, 0, 0, 0.75)
-	Context.SetRenderTargets(Tex0RTV, Tex1RTV)		  
-	Context.ClearRenderTarget(Tex0RTV, 0.25)
-	Context.ClearRenderTarget(Tex1RTV, 0.0, 0.5)
+	Context.SetRenderTargets(Tex2RTV, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")  
+	Context.ClearRenderTarget(Tex2RTV, 0, 0, 0.75, "RESOURCE_STATE_TRANSITION_MODE_VERIFY")
+	Context.SetRenderTargets(Tex0RTV, Tex1RTV, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
+	Context.ClearRenderTarget(Tex0RTV, 0.25, "RESOURCE_STATE_TRANSITION_MODE_VERIFY")
+	Context.ClearRenderTarget(Tex1RTV, 0.0, 0.5, "RESOURCE_STATE_TRANSITION_MODE_VERIFY")
 	Context.SetViewports(VP)
 	Context.SetScissorRects(SR)
 	RenderToTextures()
 	
-	Context.SetRenderTargets()
+	Context.SetRenderTargets("RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
 	Context.SetViewports()
 	BlendTextures()
 end

@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ void TestTexturing::GenerateTextureData(IRenderDevice *pRenderDevice, std::vecto
     SubResouces.resize(TexDesc.MipLevels);
  
     auto PixelFormatAttribs = pRenderDevice->GetTextureFormatInfoExt(TexDesc.Format);
-    auto PixelSize = PixelFormatAttribs.ComponentSize * PixelFormatAttribs.NumComponents;
+    auto PixelSize = Uint32{PixelFormatAttribs.ComponentSize} * Uint32{PixelFormatAttribs.NumComponents};
     
     for(Uint32 Level = 0; Level < TexDesc.MipLevels; ++Level)
     {
@@ -57,7 +57,7 @@ void TestTexturing::GenerateTextureData(IRenderDevice *pRenderDevice, std::vecto
         Uint32 MipHeight = TexDesc.Height >> Level;
         auto Stride = (MipWidth + 64) * PixelSize;
 
-        Data.resize(Data.size() + Stride * MipHeight);
+        Data.resize(Data.size() + size_t{Stride} * size_t{MipHeight});
         auto *pCurrLevelPtr = &Data[CurrLevelOffset];
         LevelDataOffsets[Level] = CurrLevelOffset;
         SubResouces[Level].Stride = Stride;
@@ -75,7 +75,7 @@ void TestTexturing::GenerateTextureData(IRenderDevice *pRenderDevice, std::vecto
                 {
                     float fCurrCmpCol = Color[iCmp];
                     fCurrCmpCol = fCurrCmpCol - floor(fCurrCmpCol);
-                    void *pDstCmp = pCurrLevelPtr + (i*PixelSize + iCmp * PixelFormatAttribs.ComponentSize + j*Stride);
+                    void *pDstCmp = pCurrLevelPtr + (i*size_t{PixelSize} + iCmp * size_t{PixelFormatAttribs.ComponentSize} + j*size_t{Stride});
                     switch(PixelFormatAttribs.ComponentType)
                     {
                         case COMPONENT_TYPE_FLOAT:
@@ -170,6 +170,7 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
     BasicShaderSourceStreamFactory BasicSSSFactory;
     CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
     CreationAttrs.Desc.TargetProfile = bUseGLSL ? SHADER_PROFILE_GL_4_2 : SHADER_PROFILE_DX_5_0;
+    CreationAttrs.UseCombinedTextureSamplers = true;
 
     RefCntAutoPtr<Diligent::IShader> pVS, pPS;
     {
@@ -196,7 +197,7 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
         StaticSampler.Desc.MinFilter = FilterType;
         StaticSampler.Desc.MagFilter = FilterType;
         StaticSampler.Desc.MipFilter = FilterType;
-        StaticSampler.TextureName = "g_tex2DTest";
+        StaticSampler.SamplerOrTextureName = "g_tex2DTest";
         CreationAttrs.Desc.NumStaticSamplers = 1;
         CreationAttrs.Desc.StaticSamplers = &StaticSampler;
         m_pRenderDevice->CreateShader( CreationAttrs, &pPS );
@@ -240,6 +241,8 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
         RefCntAutoPtr<ITextureView> pDefaultSRV;
         TextureViewDesc ViewDesc;
         ViewDesc.ViewType = TEXTURE_VIEW_SHADER_RESOURCE;
+        ViewDesc.NumMipLevels = TextureViewDesc::RemainingMipLevels;
+        ViewDesc.NumArraySlices = TextureViewDesc::RemainingArraySlices;
         m_pTexture->CreateView( ViewDesc, &pDefaultSRV );
         pDefaultSRV->SetSampler( m_pSampler );
         ResourceMappingEntry Entries[] = { { "g_tex2DTest", pDefaultSRV }, {nullptr, nullptr} };
@@ -267,10 +270,12 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
     PSODesc.GraphicsPipeline.InputLayout.LayoutElements = Elems;
     PSODesc.GraphicsPipeline.InputLayout.NumElements = _countof( Elems );
     pDevice->CreatePipelineState(PSODesc, &m_pPSO);
-
+    
     pVS->BindResources(m_pResourceMapping, 0);
     pPS->BindResources(m_pResourceMapping, 0);
     
+    m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
+
     auto *FmtName = pDevice->GetTextureFormatInfo(TexFormat).Name;
     m_TestName.append(" (");
     m_TestName.append(FmtName);
@@ -280,15 +285,15 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
 void TestTexturing::Draw()
 {
     m_pDeviceContext->SetPipelineState(m_pPSO);
-    m_pDeviceContext->TransitionShaderResources(m_pPSO, nullptr);
-    m_pDeviceContext->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_VERIFY_STATES);
+    m_pDeviceContext->TransitionShaderResources(m_pPSO, m_pSRB);
+    m_pDeviceContext->CommitShaderResources(m_pSRB, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
     
     IBuffer *pBuffs[] = {m_pVertexBuff};
     Uint32 Offsets[] = {0};
-    m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
+    m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Offsets, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET );
 
-    Diligent::DrawAttribs DrawAttrs;
-    DrawAttrs.NumVertices = 4; // Draw quad
+    // Draw quad
+    Diligent::DrawAttribs DrawAttrs(4, DRAW_FLAG_VERIFY_STATES);
     m_pDeviceContext->Draw( DrawAttrs );
     
     SetStatus(TestResult::Succeeded);

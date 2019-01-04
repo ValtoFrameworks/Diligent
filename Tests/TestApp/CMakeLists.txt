@@ -95,14 +95,14 @@ elseif(PLATFORM_MACOS)
         src/MacOS/TestAppMacOS.cpp
     )
     target_sources(TestApp PRIVATE ${MAC_SOURCE})
-    source_group("src\\McOS" FILES ${MAC_SOURCE})
+    source_group("src\\MacOS" FILES ${MAC_SOURCE})
 
 elseif(PLATFORM_IOS)
     set(IOS_SOURCE
         src/IOS/TestAppIOS.cpp
     )
     target_sources(TestApp PRIVATE ${IOS_SOURCE})
-    source_group("src\\McOS" FILES ${IOS_SOURCE})
+    source_group("src\\MacOS" FILES ${IOS_SOURCE})
 endif()
 
 set_common_target_properties(TestApp)
@@ -125,41 +125,7 @@ if(MSVC)
     endif()
 endif()
 
-if(PLATFORM_WIN32)
-    SET(ENGINE_LIBRARIES
-        GraphicsEngineD3D11-shared
-        GraphicsEngineOpenGL-shared
-    )
-    if(D3D12_SUPPORTED)
-        list(APPEND ENGINE_LIBRARIES GraphicsEngineD3D12-shared)
-    endif()
-    if(VULKAN_SUPPORTED)
-        list(APPEND ENGINE_LIBRARIES GraphicsEngineVk-shared)
-    endif()
-elseif(PLATFORM_ANDROID)
-    SET(ENGINE_LIBRARIES
-        GraphicsEngineOpenGL-shared
-    )
-elseif(PLATFORM_UNIVERSAL_WINDOWS)
-    SET(ENGINE_LIBRARIES
-        GraphicsEngineD3D11-static
-        GraphicsEngineD3D12-static
-    )
-elseif(PLATFORM_LINUX)
-    SET(ENGINE_LIBRARIES
-        GraphicsEngineOpenGL-shared
-    )
-elseif(PLATFORM_MACOS)
-    SET(ENGINE_LIBRARIES
-        GraphicsEngineOpenGL-shared
-    )
-elseif(PLATFORM_IOS)
-    SET(ENGINE_LIBRARIES
-        GraphicsEngineOpenGL-static
-    )
-else()
-    message(FATAL_ERROR "Undefined platform")
-endif()
+get_supported_backends(ENGINE_LIBRARIES)
 
 target_link_libraries(TestApp 
 PRIVATE 
@@ -187,6 +153,14 @@ elseif(PLATFORM_LINUX)
     target_link_libraries(TestApp PRIVATE GL X11 pthread)
 elseif(PLATFORM_MACOS OR PLATFORM_IOS)
 
+endif()
+
+if(PLATFORM_WIN32 OR PLATFORM_LINUX)
+    # Copy assets to target folder
+    add_custom_command(TARGET TestApp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "\"$<TARGET_FILE_DIR:TestApp>\"")
 endif()
 
 source_group("src" FILES ${SOURCE})

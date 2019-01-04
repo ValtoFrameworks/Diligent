@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -34,6 +34,8 @@ public:
 
     virtual void BeginFrame()override final;
     virtual void EndFrame()override final;
+    virtual void PreSwapChainResize()override final;
+    virtual void PostSwapChainResize()override final;
     virtual bool UsesReverseZ()override final;
 
 private:

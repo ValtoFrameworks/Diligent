@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -35,6 +35,11 @@ void TestDepthStencilState::CreateTestDSS( DepthStencilStateDesc &DSSDesc )
     RefCntAutoPtr<IPipelineState> pPSO;
     m_pDevice->CreatePipelineState( m_PSODesc, &pPSO );
     m_pDeviceContext->SetPipelineState( pPSO );
+
+    RefCntAutoPtr<IShaderResourceBinding> pSRB;
+    pPSO->CreateShaderResourceBinding(&pSRB);
+    auto PSVarCount = pSRB->GetVariableCount(SHADER_TYPE_PIXEL);
+    auto VSVarCount = pSRB->GetVariableCount(SHADER_TYPE_VERTEX);
 #if 0
     DSSDesc.Name = "TestDSS2";
     m_pDevice->CreateDepthStencilState( DSSDesc, &pDSState2 );
@@ -134,22 +139,22 @@ TestDepthStencilState::TestDepthStencilState( IRenderDevice *pDevice, IDeviceCon
         pScript->GetPipelineStateByName( "TestPSO", &pPSOFromScript);
         //pScript->GetDepthStencilStateByName( "TestDSS2", &pDSStateFromScript2 );
         //assert( pDSStateFromScript == pDSStateFromScript2 );
-        const auto &DSSDesc = pPSOFromScript->GetDesc().GraphicsPipeline.DepthStencilDesc;
+        const auto &DSSDesc2 = pPSOFromScript->GetDesc().GraphicsPipeline.DepthStencilDesc;
 
-        assert( DSSDesc.DepthEnable == True );
-        assert( DSSDesc.DepthWriteEnable == True );
-        assert( DSSDesc.DepthFunc == COMPARISON_FUNC_LESS );
-        assert( DSSDesc.StencilEnable == True );
-        assert( DSSDesc.StencilReadMask == 0xF8 );
-        assert( DSSDesc.StencilWriteMask == 0xF1 );
-        assert( DSSDesc.FrontFace.StencilFailOp == STENCIL_OP_KEEP );
-        assert( DSSDesc.FrontFace.StencilDepthFailOp == STENCIL_OP_ZERO );
-        assert( DSSDesc.FrontFace.StencilPassOp == STENCIL_OP_REPLACE );
-        assert( DSSDesc.FrontFace.StencilFunc == COMPARISON_FUNC_EQUAL );
-        assert( DSSDesc.BackFace.StencilFailOp == STENCIL_OP_INCR_SAT );
-        assert( DSSDesc.BackFace.StencilDepthFailOp == STENCIL_OP_DECR_SAT );
-        assert( DSSDesc.BackFace.StencilPassOp == STENCIL_OP_INVERT );
-        assert( DSSDesc.BackFace.StencilFunc == COMPARISON_FUNC_NOT_EQUAL );
+        assert( DSSDesc2.DepthEnable == True );
+        assert( DSSDesc2.DepthWriteEnable == True );
+        assert( DSSDesc2.DepthFunc == COMPARISON_FUNC_LESS );
+        assert( DSSDesc2.StencilEnable == True );
+        assert( DSSDesc2.StencilReadMask == 0xF8 );
+        assert( DSSDesc2.StencilWriteMask == 0xF1 );
+        assert( DSSDesc2.FrontFace.StencilFailOp == STENCIL_OP_KEEP );
+        assert( DSSDesc2.FrontFace.StencilDepthFailOp == STENCIL_OP_ZERO );
+        assert( DSSDesc2.FrontFace.StencilPassOp == STENCIL_OP_REPLACE );
+        assert( DSSDesc2.FrontFace.StencilFunc == COMPARISON_FUNC_EQUAL );
+        assert( DSSDesc2.BackFace.StencilFailOp == STENCIL_OP_INCR_SAT );
+        assert( DSSDesc2.BackFace.StencilDepthFailOp == STENCIL_OP_DECR_SAT );
+        assert( DSSDesc2.BackFace.StencilPassOp == STENCIL_OP_INVERT );
+        assert( DSSDesc2.BackFace.StencilFunc == COMPARISON_FUNC_NOT_EQUAL );
     }
 
     {

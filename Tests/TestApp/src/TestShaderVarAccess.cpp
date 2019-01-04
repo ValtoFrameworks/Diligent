@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ TestShaderVarAccess::TestShaderVarAccess( IRenderDevice *pDevice, IDeviceContext
     BasicShaderSourceStreamFactory BasicSSSFactory("Shaders");
     CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
     CreationAttrs.EntryPoint = "main";
+    CreationAttrs.UseCombinedTextureSamplers = true;
 
     RefCntAutoPtr<ISampler> pSamplers[2];
     IDeviceObject *pSams[2];
@@ -122,28 +123,51 @@ TestShaderVarAccess::TestShaderVarAccess( IRenderDevice *pDevice, IDeviceContext
     //    pSBUAVs[i] = pStorgeBuffs[i]->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS);
     //}
 
-    RefCntAutoPtr<IBuffer> pFormattedBuff0, pFormattedBuff[4];
+    RefCntAutoPtr<IBuffer> pFormattedBuff0, pFormattedBuff[4], pRawBuff[2];
     IDeviceObject *pFormattedBuffSRV = nullptr, *pFormattedBuffUAV[4] = {}, *pFormattedBuffSRVs[4] = {};
+    RefCntAutoPtr<IBufferView> spFormattedBuffSRV, spFormattedBuffUAV[4], spFormattedBuffSRVs[4];
+    RefCntAutoPtr<IBufferView> spRawBuffUAV[2], spRawBuffSRVs[2];
     {
         Diligent::BufferDesc TxlBuffDesc;
         TxlBuffDesc.Name = "Uniform texel buffer test";
         TxlBuffDesc.uiSizeInBytes = 256;
         TxlBuffDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
         TxlBuffDesc.Usage = USAGE_DEFAULT;
-        TxlBuffDesc.Format.ValueType = VT_FLOAT32;
-        TxlBuffDesc.Format.NumComponents = 4;
-        TxlBuffDesc.Format.IsNormalized = false;
+        TxlBuffDesc.ElementByteStride = 16;
         TxlBuffDesc.Mode = BUFFER_MODE_FORMATTED;
         pDevice->CreateBuffer(TxlBuffDesc, BufferData{}, &pFormattedBuff0);
-        pFormattedBuffSRV = pFormattedBuff0->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE);
+        
+        Diligent::BufferViewDesc ViewDesc;
+        ViewDesc.ViewType = BUFFER_VIEW_SHADER_RESOURCE;
+        ViewDesc.Format.ValueType = VT_FLOAT32;
+        ViewDesc.Format.NumComponents = 4;
+        ViewDesc.Format.IsNormalized = false;
+        pFormattedBuff0->CreateView(ViewDesc, &spFormattedBuffSRV);
+        pFormattedBuffSRV = spFormattedBuffSRV;
 
         for(size_t i=0; i < _countof(pFormattedBuff); ++i)
         {
             TxlBuffDesc.Name = "UAV buffer test";
             TxlBuffDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
             pDevice->CreateBuffer(TxlBuffDesc, BufferData{}, &(pFormattedBuff[i]));
-            pFormattedBuffUAV[i] = pFormattedBuff[i]->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS);
-            pFormattedBuffSRVs[i] = pFormattedBuff[i]->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE);
+            
+            ViewDesc.ViewType = BUFFER_VIEW_UNORDERED_ACCESS;
+            pFormattedBuff[i]->CreateView(ViewDesc, &(spFormattedBuffUAV[i]));
+            pFormattedBuffUAV[i] = spFormattedBuffUAV[i];
+
+            ViewDesc.ViewType = BUFFER_VIEW_SHADER_RESOURCE;
+            pFormattedBuff[i]->CreateView(ViewDesc, &(spFormattedBuffSRVs[i]));
+            pFormattedBuffSRVs[i] = spFormattedBuffSRVs[i];
+        }
+
+        TxlBuffDesc.Mode = BUFFER_MODE_RAW;
+        ViewDesc.Format.ValueType = VT_UNDEFINED;
+        for(size_t i=0; i < _countof(pRawBuff); ++i)
+        {
+            TxlBuffDesc.Name = "Raw buffer test";
+            pDevice->CreateBuffer(TxlBuffDesc, BufferData{}, &(pRawBuff[i]));
+            spRawBuffUAV[i]  = pRawBuff[i]->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS);
+            spRawBuffSRVs[i] = pRawBuff[i]->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE);
         }
     }
  
@@ -303,7 +327,7 @@ TestShaderVarAccess::TestShaderVarAccess( IRenderDevice *pDevice, IDeviceContext
         auto rwBuff_Static = pPS->GetShaderVariable("g_rwBuff_Static");
         VERIFY_EXPR(rwBuff_Static->GetArraySize() == 1);
         VERIFY_EXPR(rwBuff_Static == pPS->GetShaderVariable(rwBuff_Static->GetName()));
-        rwBuff_Static->Set(pFormattedBuffUAV[0]);
+        rwBuff_Static->Set(spRawBuffUAV[0]);
 
 
         auto tex2D_Mut = pPS->GetShaderVariable("g_tex2D_Mut");
@@ -339,7 +363,7 @@ TestShaderVarAccess::TestShaderVarAccess( IRenderDevice *pDevice, IDeviceContext
     VERIFY_EXPR(pTestPSO);
 
     RefCntAutoPtr<IShaderResourceBinding> pSRB;
-    pTestPSO->CreateShaderResourceBinding(&pSRB);
+    pTestPSO->CreateShaderResourceBinding(&pSRB, true);
 
     {
         auto tex2D_Mut = pSRB->GetVariable(SHADER_TYPE_VERTEX, "g_tex2D_Mut");
@@ -436,7 +460,7 @@ TestShaderVarAccess::TestShaderVarAccess( IRenderDevice *pDevice, IDeviceContext
         auto Buffer_Mut = pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_Buffer_Mut");
         VERIFY_EXPR(Buffer_Mut->GetArraySize() == 1);
         VERIFY_EXPR(Buffer_Mut == pSRB->GetVariable(SHADER_TYPE_PIXEL, Buffer_Mut->GetName()));
-        Buffer_Mut->Set(pFormattedBuffSRV);
+        Buffer_Mut->Set(spRawBuffSRVs[1]);
 
         auto Buffer_MutArr = pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_Buffer_MutArr");
         VERIFY_EXPR(Buffer_MutArr->GetArraySize() == 2);
@@ -509,10 +533,9 @@ TestShaderVarAccess::TestShaderVarAccess( IRenderDevice *pDevice, IDeviceContext
 
 
     pContext->SetPipelineState(pTestPSO);
-    pContext->CommitShaderResources(pSRB, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    pContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
-    DrawAttribs DrawAttrs;
-    DrawAttrs.NumVertices = 3;
+    DrawAttribs DrawAttrs(3, DRAW_FLAG_VERIFY_STATES);
     pContext->Draw(DrawAttrs);
 
     pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_rwtex2D_Dyn")->Set(pTexUAVs[7]);
@@ -520,15 +543,22 @@ TestShaderVarAccess::TestShaderVarAccess( IRenderDevice *pDevice, IDeviceContext
     pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_rwBuff_Dyn")->Set(pFormattedBuffUAV[3]);
     pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_Buffer_Dyn")->Set(pFormattedBuffSRVs[2]);
 
-    m_pDeviceContext->SetRenderTargets(1, &pRTV, pDSV);
-    float Zero[4] = {};
-    m_pDeviceContext->ClearRenderTarget(pRTV, Zero);
-    m_pDeviceContext->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG);
+    LOG_INFO_MESSAGE("No worries about 3 errors below: attempting to access variables from inactive shader stage");
+    auto pNonExistingVar = pSRB->GetVariable(SHADER_TYPE_GEOMETRY, "g_NonExistingVar");
+    VERIFY_EXPR(pNonExistingVar == nullptr);
+    pNonExistingVar = pSRB->GetVariable(SHADER_TYPE_GEOMETRY, 4);
+    VERIFY_EXPR(pNonExistingVar == nullptr);
+    VERIFY_EXPR(pSRB->GetVariableCount(SHADER_TYPE_GEOMETRY) == 0);
 
-    pContext->CommitShaderResources(pSRB, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    m_pDeviceContext->SetRenderTargets(1, &pRTV, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    float Zero[4] = {};
+    m_pDeviceContext->ClearRenderTarget(pRTV, Zero, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+    m_pDeviceContext->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, 1, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+
+    pContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     pContext->Draw(DrawAttrs);
 
-    m_pDeviceContext->SetRenderTargets(0, nullptr, nullptr);
+    m_pDeviceContext->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     SetStatus(TestResult::Succeeded);
 }

@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -45,6 +45,7 @@ void TestTessellation::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceCont
     BasicShaderSourceStreamFactory BasicSSSFactory;
     CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
     CreationAttrs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+    CreationAttrs.UseCombinedTextureSamplers = true;
 
     RefCntAutoPtr<Diligent::IShader> pVS, pHS, pDS, pPS;
     {
@@ -131,14 +132,14 @@ void TestTessellation::Draw()
         return;
 
     m_pDeviceContext->SetPipelineState(m_pQuadPSO);
-    m_pDeviceContext->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    m_pDeviceContext->CommitShaderResources(nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
-    Diligent::DrawAttribs DrawAttrs;
-    DrawAttrs.NumVertices = 2; // Draw 2 quad patches
+    // Draw 2 quad patches
+    Diligent::DrawAttribs DrawAttrs(2, DRAW_FLAG_VERIFY_STATES);
     m_pDeviceContext->Draw(DrawAttrs);
 
     m_pDeviceContext->SetPipelineState(m_pTriPSO);
-    m_pDeviceContext->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    m_pDeviceContext->CommitShaderResources(nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     DrawAttrs.NumVertices = 1; // Draw 1 tri patch
     m_pDeviceContext->Draw(DrawAttrs);
     

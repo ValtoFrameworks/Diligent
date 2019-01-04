@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -45,6 +45,7 @@ void TestGeometryShader::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceCo
     BasicShaderSourceStreamFactory BasicSSSFactory;
     CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
     CreationAttrs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+    CreationAttrs.UseCombinedTextureSamplers = true;
 
     RefCntAutoPtr<Diligent::IShader> pVS, pGS, pPS;
     {
@@ -87,10 +88,10 @@ void TestGeometryShader::Draw()
         return;
 
     m_pDeviceContext->SetPipelineState(m_pPSO);
-    m_pDeviceContext->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    m_pDeviceContext->CommitShaderResources(nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
-    Diligent::DrawAttribs DrawAttrs;
-    DrawAttrs.NumVertices = 2; // Draw 2 triangles
+    // Draw 2 triangles
+    Diligent::DrawAttribs DrawAttrs(2, DRAW_FLAG_VERIFY_STATES);
     m_pDeviceContext->Draw(DrawAttrs);
     
     SetStatus(TestResult::Succeeded);

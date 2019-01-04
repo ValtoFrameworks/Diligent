@@ -410,6 +410,7 @@ int main(int argc, char** argv)
     gSettings.windowWidth *= dpi / 96;
     gSettings.windowHeight *= dpi / 96;
 
+    gSettings.mode = Settings::RenderMode::Undefined;
     for (int a = 1; a < argc; ++a) {
         if (_stricmp(argv[a], "-close_after") == 0 && a + 1 < argc) {
             gSettings.closeAfterSeconds = atof(argv[++a]);
@@ -434,6 +435,12 @@ int main(int argc, char** argv)
             gSettings.lockedFrameRate = atoi(argv[++a]);
         } else if (_stricmp(argv[a], "-threads") == 0 && a + 1 < argc) {
             gSettings.numThreads = atoi(argv[++a]);
+        } else if (_stricmp(argv[a], "-d3d11") == 0) {
+            gSettings.mode = Settings::RenderMode::DiligentD3D11;
+        } else if (_stricmp(argv[a], "-d3d12") == 0) {
+            gSettings.mode = gd3d12Available ? Settings::RenderMode::DiligentD3D12 : Settings::RenderMode::Undefined;
+        } else if (_stricmp(argv[a], "-vk") == 0) {
+            gSettings.mode = gVulkanAvailable ? Settings::RenderMode::DiligentVulkan : Settings::RenderMode::Undefined;
         } else {
             fprintf(stderr, "error: unrecognized argument '%s'\n", argv[a]);
             fprintf(stderr, "usage: asteroids_d3d12 [options]\n");
@@ -471,13 +478,15 @@ int main(int argc, char** argv)
 
     AsteroidsSimulation asteroids(1337, NUM_ASTEROIDS, NUM_UNIQUE_MESHES, MESH_MAX_SUBDIV_LEVELS, NUM_UNIQUE_TEXTURES);
 
-    if (gVulkanAvailable)
-        gSettings.mode = Settings::RenderMode::DiligentVulkan;
-    else if (gd3d12Available)
-        gSettings.mode = Settings::RenderMode::DiligentD3D12;
-    else
-        gSettings.mode = Settings::RenderMode::DiligentD3D11;
-
+    if (gSettings.mode == Settings::RenderMode::Undefined)
+    {
+        if (gVulkanAvailable)
+            gSettings.mode = Settings::RenderMode::DiligentVulkan;
+        else if (gd3d12Available)
+            gSettings.mode = Settings::RenderMode::DiligentD3D12;
+        else
+            gSettings.mode = Settings::RenderMode::DiligentD3D11;
+    }
 
     // init window class
     WNDCLASSEX windowClass;
@@ -606,7 +615,7 @@ int main(int argc, char** argv)
             filteredFrameTime = filteredFrameTime * (1.f - filterScale) + filterScale * (float)frameTime;
 
             char buffer[256];
-            sprintf_s(buffer, "Asteroids %s%s (%dt) - %4.2f ms (%4.2f ms / %4.2f ms)", ModeStr, resBindModeStr, gSettings.multithreadedRendering ? gSettings.numThreads : 1, 
+            sprintf_s(buffer, "Asteroids %s%s (%dt) - %4.2f ms (%4.2f ms / %4.2f ms)", ModeStr, resBindModeStr, (gSettings.multithreadedRendering ? gSettings.numThreads : 1), 
                               1000.f * filteredFrameTime, 1000.f * filteredUpdateTime, 1000.f * filteredRenderTime);
 
             SetWindowText(hWnd, buffer);

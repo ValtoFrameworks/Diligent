@@ -33,10 +33,17 @@ PositionsBuffer = Buffer.Create(
 		Usage = "USAGE_DEFAULT",
 		BindFlags = {"BIND_VERTEX_BUFFER", "BIND_UNORDERED_ACCESS"},
 		Mode = "BUFFER_MODE_FORMATTED",
-		Format = {ValueType = "VT_FLOAT32", NumComponents = 4, IsNormalized = false},
+        ElementByteStride = 16,
 		uiSizeInBytes = (4 + 8) * 4 * 4
 	}
 )
+PositionsBufferUAV = PositionsBuffer:CreateView
+{
+    Name = "bufPositions UAV",
+    ViewType = "BUFFER_VIEW_UNORDERED_ACCESS",
+    Format = {ValueType = "VT_FLOAT32", NumComponents = 4}
+}
+
 
 TexcoordBuffer = Buffer.Create(
 	{
@@ -44,10 +51,12 @@ TexcoordBuffer = Buffer.Create(
 		Usage = "USAGE_DEFAULT",
 		BindFlags = {"BIND_VERTEX_BUFFER", "BIND_UNORDERED_ACCESS"},
 		Mode = "BUFFER_MODE_FORMATTED",
-		Format = {ValueType = "VT_FLOAT32", NumComponents = 4, IsNormalized = false},
+        ElementByteStride = 16,
 		uiSizeInBytes = (4 + 8) * 4 * 4
 	}
 )
+
+
 
 OffsetsBuffer = Buffer.Create(
 	{
@@ -56,11 +65,18 @@ OffsetsBuffer = Buffer.Create(
 		BindFlags = {"BIND_UNORDERED_ACCESS", "BIND_SHADER_RESOURCE"},
 		--uiSizeInBytes = 64,
 		Mode = "BUFFER_MODE_FORMATTED",
-		Format = {ValueType = "VT_FLOAT32", NumComponents = 4, IsNormalized = false},
+        ElementByteStride = 16
 	},
 	"VT_FLOAT32",
 	{0.03,0,0,0,  0,0.03,0,0,  0.03,0.03,0,0,  -0.03,-0.03,0,0}
 )
+OffsetsBufferSRV = OffsetsBuffer:CreateView
+{
+    Name = "Offsets UAV",
+    ViewType = "BUFFER_VIEW_SHADER_RESOURCE",
+    Format = {ValueType = "VT_FLOAT32", NumComponents = 4}
+}
+
 
 IndexBuffer  = Buffer.Create(
 	{
@@ -68,54 +84,71 @@ IndexBuffer  = Buffer.Create(
 		Usage = "USAGE_DEFAULT",
 		BindFlags = {"BIND_INDEX_BUFFER", "BIND_UNORDERED_ACCESS"},
 		Mode = "BUFFER_MODE_FORMATTED",
-		Format = {ValueType = "VT_UINT32", NumComponents = 4, IsNormalized = false},
+        ElementByteStride = 16
 	},
 	"VT_UINT32",
 	{0,0,0,0}
 )
+IndexBufferUAV = IndexBuffer:CreateView
+{
+    Name = "bufIndices UAV",
+    ViewType = "BUFFER_VIEW_UNORDERED_ACCESS",
+    Format = {ValueType = "VT_UINT32", NumComponents = 4}
+}
+
 
 IndirectDrawArgsBuffer = Buffer.Create(
 	{
         Name = "Indirect Draw Args Buffer",
 		Usage = "USAGE_DEFAULT",
 		BindFlags = {"BIND_INDIRECT_DRAW_ARGS", "BIND_UNORDERED_ACCESS"},
-		Format = {ValueType = "VT_UINT32", NumComponents = 4, IsNormalized = false},
+        ElementByteStride = 16,
 		Mode = "BUFFER_MODE_FORMATTED",
 		uiSizeInBytes = 32
 	}
 )
+IndirectDrawArgsBufferUAV = IndirectDrawArgsBuffer:CreateView
+{
+    Name = "bufIndirectDrawArgs UAV",
+    ViewType = "BUFFER_VIEW_UNORDERED_ACCESS",
+    Format = {ValueType = "VT_UINT32", NumComponents = 4}
+}
+
 
 IndirectDispatchArgsBuffer =  Buffer.Create(
 	{
         Name = "Indirect Dispatch Args Buffer",
 		Usage = "USAGE_DEFAULT",
 		BindFlags = {"BIND_INDIRECT_DRAW_ARGS", "BIND_UNORDERED_ACCESS"},
-		Format = {ValueType = "VT_UINT32", NumComponents = 4, IsNormalized = false},
+        ElementByteStride = 16,
 		Mode = "BUFFER_MODE_FORMATTED",
 		uiSizeInBytes = 64
 	}
 )
+IndirectDispatchArgsBufferUAV = IndirectDispatchArgsBuffer:CreateView
+{
+    Name = "bufIndirectDispatchArgs UAV",
+    ViewType = "BUFFER_VIEW_UNORDERED_ACCESS",
+    Format = {ValueType = "VT_UINT32", NumComponents = 4}
+}
 
-if Constants.DeviceType == "D3D11" or Constants.DeviceType == "D3D12"  or Constants.DeviceType == "Vulkan" then
-	TexcoordDataOffset = 0 -- Non-zero byte offset is only supported for structured buffers in DirectX
-else
-	TexcoordDataOffset = 2*4*4
-end
-
-TexCoordUAV = TexcoordBuffer:CreateView{
+TexcoordDataOffset = 2*4*4
+TexCoordUAV = TexcoordBuffer:CreateView
+{
 	ViewType = "BUFFER_VIEW_UNORDERED_ACCESS",
 	ByteOffset = TexcoordDataOffset,
-	ByteWidth = 4*4*4
+	ByteWidth = 4*4*4,
+    Format = {ValueType = "VT_FLOAT32", NumComponents = 4}
 }
 
 ResMapping = ResourceMapping.Create{
 	{Name = "g_tex2DTest", pObject = TestTexture:GetDefaultView("TEXTURE_VIEW_SHADER_RESOURCE")},
-	{Name = "bufPositions", pObject = PositionsBuffer:GetDefaultView("BUFFER_VIEW_UNORDERED_ACCESS") },
+	{Name = "bufPositions", pObject = PositionsBufferUAV },
 	{Name = "bufTexcoord", pObject = TexCoordUAV},
-	{Name = "bufIndices", pObject = IndexBuffer:GetDefaultView("BUFFER_VIEW_UNORDERED_ACCESS") },
-	{Name = "bufIndirectDrawArgs", pObject = IndirectDrawArgsBuffer:GetDefaultView("BUFFER_VIEW_UNORDERED_ACCESS") },
-	{Name = "bufIndirectDispatchArgs", pObject = IndirectDispatchArgsBuffer:CreateView{ ViewType = "BUFFER_VIEW_UNORDERED_ACCESS"} },
-	{Name = "Offsets", pObject = OffsetsBuffer:CreateView{ ViewType = "BUFFER_VIEW_SHADER_RESOURCE"} }
+	{Name = "bufIndices", pObject = IndexBufferUAV},
+	{Name = "bufIndirectDrawArgs", pObject = IndirectDrawArgsBufferUAV },
+	{Name = "bufIndirectDispatchArgs", pObject = IndirectDispatchArgsBufferUAV },
+	{Name = "Offsets", pObject = OffsetsBufferSRV}
 }
 
 function GetShaderPath( ShaderName, ShaderExt, GLESSpecial )
@@ -134,6 +167,7 @@ end
 
 FillTextureCS = Shader.Create{
 	FilePath =  GetShaderPath("CSTest\\FillTexture", "csh"),
+    UseCombinedTextureSamplers = true,
 	Desc = 
 	{
 		ShaderType = "SHADER_TYPE_COMPUTE",
@@ -145,31 +179,37 @@ assert(FillTextureCS.Desc.VariableDesc[1].Type == "SHADER_VARIABLE_TYPE_DYNAMIC"
 
 UpdateVertBuffCS = Shader.Create{
 	FilePath =  GetShaderPath("CSTest\\UpdateVertBuff", "csh", true),
+    UseCombinedTextureSamplers = true,
 	Desc = {ShaderType = "SHADER_TYPE_COMPUTE"}
 }
 
 UpdateIndBuffCS = Shader.Create{
 	FilePath =  GetShaderPath("CSTest\\UpdateIndBuff", "csh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {ShaderType = "SHADER_TYPE_COMPUTE"}
 }
 
 UpdateDrawArgsBuffCS = Shader.Create{
 	FilePath =  GetShaderPath("CSTest\\UpdateDrawArgsBuff", "csh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {ShaderType = "SHADER_TYPE_COMPUTE"}
 }
 
 UpdateDispatchArgsBuffCS = Shader.Create{
 	FilePath =  GetShaderPath("CSTest\\UpdateDispatchArgsBuff", "csh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {ShaderType = "SHADER_TYPE_COMPUTE"}
 }
 
 RenderVS = Shader.Create{
 	FilePath =  GetShaderPath("TextureTest", "vsh"),
+    UseCombinedTextureSamplers = true,
 	Desc = { ShaderType = "SHADER_TYPE_VERTEX" }
 }
 
 RenderPS = Shader.Create{
 	FilePath =  GetShaderPath("TextureTest", "psh"),
+    UseCombinedTextureSamplers = true,
 	Desc = { ShaderType = "SHADER_TYPE_PIXEL" }
 }
 
@@ -193,6 +233,7 @@ UpdateVertBuffPSO = PipelineState.Create
 		pCS = UpdateVertBuffCS
 	}
 }
+UpdateVertBuffSRB = UpdateVertBuffPSO:CreateShaderResourceBinding()
 
 UpdateIndBuffPSO = PipelineState.Create
 {
@@ -203,6 +244,7 @@ UpdateIndBuffPSO = PipelineState.Create
 		pCS = UpdateIndBuffCS
 	}
 }
+UpdateIndBuffSRB = UpdateIndBuffPSO:CreateShaderResourceBinding()
 
 UpdateDrawArgsBuffPSO = PipelineState.Create
 {
@@ -213,6 +255,7 @@ UpdateDrawArgsBuffPSO = PipelineState.Create
 		pCS = UpdateDrawArgsBuffCS
 	}
 }
+UpdateDrawArgsBuffSRB = UpdateDrawArgsBuffPSO:CreateShaderResourceBinding()
 
 UpdateDispatchArgsBuffPSO = PipelineState.Create
 {
@@ -225,6 +268,7 @@ UpdateDispatchArgsBuffPSO = PipelineState.Create
 }
 assert(UpdateDrawArgsBuffPSO:IsCompatibleWith(UpdateDispatchArgsBuffPSO) == true)
 assert(UpdateDispatchArgsBuffPSO:IsCompatibleWith(UpdateDrawArgsBuffPSO) == true)
+UpdateDispatchArgsBuffSRB = UpdateDispatchArgsBuffPSO:CreateShaderResourceBinding()
 
 RenderPSO = PipelineState.Create
 {
@@ -249,30 +293,38 @@ RenderPSO = PipelineState.Create
         PrimitiveTopology = "PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP"
 	}
 }
+RenderSRB = RenderPSO:CreateShaderResourceBinding()
 
-UpdateVertBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_RESET_BINDINGS", "BIND_SHADER_RESOURCES_ALL_RESOLVED"} )
-UpdateIndBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_RESET_BINDINGS", "BIND_SHADER_RESOURCES_ALL_RESOLVED"})
-UpdateDrawArgsBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_RESET_BINDINGS", "BIND_SHADER_RESOURCES_ALL_RESOLVED"})
-UpdateDispatchArgsBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_RESET_BINDINGS", "BIND_SHADER_RESOURCES_ALL_RESOLVED"})
-RenderVS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_RESET_BINDINGS", "BIND_SHADER_RESOURCES_ALL_RESOLVED"})
-RenderPS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_RESET_BINDINGS", "BIND_SHADER_RESOURCES_ALL_RESOLVED"})
+UpdateVertBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED", "BIND_SHADER_RESOURCES_UPDATE_STATIC"} )
+UpdateIndBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED", "BIND_SHADER_RESOURCES_UPDATE_ALL"})
+UpdateDrawArgsBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
+UpdateDispatchArgsBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
+RenderVS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
+RenderPS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
 
+FillTextureSRB:InitializeStaticResources()
+UpdateVertBuffSRB:InitializeStaticResources()
+UpdateIndBuffSRB:InitializeStaticResources()
+UpdateDrawArgsBuffSRB:InitializeStaticResources()
+UpdateDispatchArgsBuffSRB:InitializeStaticResources()
+RenderSRB:InitializeStaticResources()
 
 DrawAttrs = DrawAttribs.Create{
     IsIndexed = true,
 	IndexType = "VT_UINT32",
-	IsIndirect = true,
-	pIndirectDrawAttribs = IndirectDrawArgsBuffer
+	pIndirectDrawAttribs = IndirectDrawArgsBuffer,
+    IndirectAttribsBufferStateTransitionMode = "RESOURCE_STATE_TRANSITION_MODE_TRANSITION",
+    Flags = {"DRAW_FLAG_VERIFY_STATES"}
 }
 
 
 
 function Draw()
 	Context.SetPipelineState(RenderPSO)
-	Context.TransitionShaderResources(RenderPSO)
-	Context.CommitShaderResources()
-	Context.SetVertexBuffers(PositionsBuffer, 0, TexcoordBuffer, TexcoordDataOffset, "SET_VERTEX_BUFFERS_FLAG_RESET")
-	Context.SetIndexBuffer(IndexBuffer)
+	Context.TransitionShaderResources(RenderPSO, RenderSRB)
+	Context.CommitShaderResources(RenderSRB)
+	Context.SetVertexBuffers(PositionsBuffer, 0, TexcoordBuffer, TexcoordDataOffset, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION", "SET_VERTEX_BUFFERS_FLAG_RESET")
+	Context.SetIndexBuffer(IndexBuffer, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION" )
 	Context.Draw(DrawAttrs)
 end
 
@@ -288,27 +340,27 @@ function Dispatch()
 		local NumGroupsY = math.floor( (bit32.rshift(TestTexture.Height, Mip) + ThreadGroupSizeX - 1) / ThreadGroupSizeY )
 		tex2DTestUAV:Set(UAVs[Mip])
 		
-		Context.CommitShaderResources(FillTextureSRB, "COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES" )
+		Context.CommitShaderResources(FillTextureSRB, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION" )
 
-		Context.DispatchCompute(NumGroupsX, NumGroupsY)	
+		Context.DispatchCompute(NumGroupsX, NumGroupsY)
 	end
 
 	Context.SetPipelineState(UpdateDispatchArgsBuffPSO)
-	Context.TransitionShaderResources(UpdateDispatchArgsBuffPSO)
-	Context.CommitShaderResources()
+	Context.TransitionShaderResources(UpdateDispatchArgsBuffPSO, UpdateDispatchArgsBuffSRB)
+	Context.CommitShaderResources(UpdateDispatchArgsBuffSRB)
 	Context.DispatchCompute(1)
 
 	Context.SetPipelineState(UpdateDrawArgsBuffPSO)
-	Context.CommitShaderResources("COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES")
-	Context.DispatchCompute(IndirectDispatchArgsBuffer, 16)
+	Context.CommitShaderResources(UpdateDrawArgsBuffSRB, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
+	Context.DispatchCompute(IndirectDispatchArgsBuffer, 16, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
 
 	Context.SetPipelineState(UpdateIndBuffPSO)
-	Context.TransitionShaderResources(UpdateIndBuffPSO)
-	Context.CommitShaderResources()
+	Context.TransitionShaderResources(UpdateIndBuffPSO, UpdateIndBuffSRB)
+	Context.CommitShaderResources(UpdateIndBuffSRB)
 	Context.DispatchCompute(1)
 	
 	Context.SetPipelineState(UpdateVertBuffPSO)
-	Context.CommitShaderResources("COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES")
+	Context.CommitShaderResources(UpdateVertBuffSRB, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
 	Context.DispatchCompute(2)	
 
 	return Draw()

@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -106,10 +106,13 @@ void TestCreateObjFromNativeResGL::CreateTexture(Diligent::ITexture *pTexture)
     TmpTexDesc.Height = 0;
     TmpTexDesc.MipLevels = 0;
     TmpTexDesc.Format = TEX_FORMAT_UNKNOWN;
-    pDeviceGL->CreateTextureFromGLHandle(GLHandle, TmpTexDesc, &pAttachedTexture);
+    pDeviceGL->CreateTextureFromGLHandle(GLHandle, TmpTexDesc, RESOURCE_STATE_UNKNOWN, &pAttachedTexture);
     ++m_NumTexturesCreated;
     
-    const auto &TestTexDesc = pAttachedTexture->GetDesc();
+    auto TestTexDesc = pAttachedTexture->GetDesc();
+    if (m_pDevice->GetTextureFormatInfo(SrcTexDesc.Format).IsTypeless)
+        TestTexDesc.Format = SrcTexDesc.Format;
+
     VERIFY_EXPR(TestTexDesc == SrcTexDesc);
     RefCntAutoPtr<ITextureGL> pAttachedTextureGL(pAttachedTexture, IID_TextureGL);
     VERIFY_EXPR(pAttachedTextureGL->GetGLTextureHandle() == GLHandle);
@@ -127,7 +130,7 @@ void TestCreateObjFromNativeResGL::CreateBuffer(Diligent::IBuffer *pBuffer)
     auto GLBufferHandle = pBufferGL->GetGLBufferHandle();
   
     RefCntAutoPtr<IBuffer> pBufferFromNativeGLHandle;
-    pDeviceGL->CreateBufferFromGLHandle(GLBufferHandle, SrcBuffDesc, &pBufferFromNativeGLHandle);
+    pDeviceGL->CreateBufferFromGLHandle(GLBufferHandle, SrcBuffDesc, RESOURCE_STATE_UNKNOWN, &pBufferFromNativeGLHandle);
     ++m_NumBuffersCreated;
     
     const auto &TestBufferDesc = pBufferFromNativeGLHandle->GetDesc();

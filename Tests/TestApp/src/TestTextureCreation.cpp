@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ public:
     TextureCreationVerifier( IRenderDevice *pDevice, IDeviceContext *pContext ) :
         m_pDevice(pDevice),
         m_pDeviceContext(pContext),
-        m_BindFlags(0),
+        m_BindFlags(BIND_NONE),
         m_TextureFormat(TEX_FORMAT_UNKNOWN),
         m_PixelSize(0),
         m_bTestDataUpload(False)
@@ -91,7 +91,7 @@ public:
     
     void Test(TEXTURE_FORMAT TextureFormat,
               Uint32 PixelSize,      
-              Uint32 BindFlags,
+              BIND_FLAGS BindFlags,
               Bool TestDataUpload)
     {
         m_TextureFormat = TextureFormat;
@@ -143,9 +143,9 @@ public:
         if( m_TextureFormat != TEX_FORMAT_RGB9E5_SHAREDEXP && 
             PixelFormatAttribs.ComponentType != COMPONENT_TYPE_COMPRESSED )
         {
-            if( TexCaps.bTexture2DMSSupported && (BindFlags & (BIND_RENDER_TARGET|BIND_DEPTH_STENCIL)) != 0 )
+            if (TexCaps.bTexture2DMSSupported)
             {
-                if( PixelFormatAttribs.SupportsMS )
+                if( (PixelFormatAttribs.SampleCounts & 0x04) != 0 && (BindFlags & (BIND_RENDER_TARGET|BIND_DEPTH_STENCIL)) != 0 )
                 {
                     CreateTestTexture( RESOURCE_DIM_TEX_2D, 4 );
                     CreateTestTexture( RESOURCE_DIM_TEX_2D, 4 );
@@ -153,17 +153,12 @@ public:
             }
             else
             {
-                static bool FirstTime = true;
-                if( FirstTime )
-                {
-                    LOG_WARNING_MESSAGE( "Texture 2D MS is not supported\n" );
-                    FirstTime = false;
-                }
+                LOG_WARNING_MESSAGE_ONCE("Texture 2D MS is not supported\n");
             }
 
-            if( TexCaps.bTexture2DMSArraySupported && (BindFlags & (BIND_RENDER_TARGET|BIND_DEPTH_STENCIL)) != 0 )
+            if (TexCaps.bTexture2DMSArraySupported)
             {
-                if( PixelFormatAttribs.SupportsMS )
+                if( (PixelFormatAttribs.SampleCounts & 0x04) != 0 && (BindFlags & (BIND_RENDER_TARGET|BIND_DEPTH_STENCIL)) != 0)
                 {
                     CreateTestTexture( RESOURCE_DIM_TEX_2D_ARRAY, 4 );
                     CreateTestTexture( RESOURCE_DIM_TEX_2D_ARRAY, 4 );
@@ -171,12 +166,7 @@ public:
             }
             else
             {
-                static bool FirstTime = true;
-                if( FirstTime )
-                {
-                    LOG_WARNING_MESSAGE( "Texture 2D MS Array is not supported\n" );
-                    FirstTime = false;
-                }
+                LOG_WARNING_MESSAGE_ONCE( "Texture 2D MS Array is not supported\n" );
             }
         }
 
@@ -193,7 +183,7 @@ private:
                                 TextureData &InitData)
     {
 
-        Uint32 PixelSize = PixelFormatAttribs.ComponentSize * PixelFormatAttribs.NumComponents;
+        Uint32 PixelSize = Uint32{PixelFormatAttribs.ComponentSize} * Uint32{PixelFormatAttribs.NumComponents};
         assert( PixelSize == m_PixelSize );
             
         Uint32 ArrSize = (TexDesc.Type == RESOURCE_DIM_TEX_3D) ? 1 : TexDesc.ArraySize;
@@ -277,20 +267,40 @@ private:
             RefCntAutoPtr<Diligent::ITexture> pTestTex2;
             m_pDevice->CreateTexture( TexDesc, InitData, &pTestTex2 );
             m_pTestCreateObjFromNativeRes->CreateTexture(pTestTex2);
-            Box SrcBox;
-            SrcBox.MinX = TexDesc.Width/4;
-            SrcBox.MinY = TexDesc.Height/4;
-            SrcBox.MinZ = ( TexDesc.Type == RESOURCE_DIM_TEX_3D ) ? TexDesc.Depth/4 : 0;
-            SrcBox.MaxX = std::max(TexDesc.Width/3, SrcBox.MinX+1);
-            SrcBox.MaxY = std::max(TexDesc.Height/3, SrcBox.MinY+1);
-            SrcBox.MaxZ = ( TexDesc.Type == RESOURCE_DIM_TEX_3D ) ? std::max(TexDesc.Depth/3, SrcBox.MinZ+1) : 1;
-            //pTestTex2->UpdateData(m_pDeviceContext, 0, 0, DstBox, SubResources[0]);
-            pTestTex->CopyData(m_pDeviceContext, pTestTex2, 0, 0, &SrcBox, 0, 0, 0,0,0);
+
+            if(m_pDevice->GetDeviceCaps().DevType == DeviceType::D3D11 && 
+                ((TexDesc.BindFlags & BIND_DEPTH_STENCIL) != 0 || TexDesc.SampleCount > 1) )
+            {
+                // In D3D11 if CopySubresourceRegion is used with Multisampled or D3D11_BIND_DEPTH_STENCIL Resources, 
+                // then the whole Subresource must be copied.
+                CopyTextureAttribs CopyAttribs(pTestTex2, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, pTestTex, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+                m_pDeviceContext->CopyTexture(CopyAttribs);
+            }
+            else
+            {
+                Box SrcBox;
+                SrcBox.MinX = TexDesc.Width/4;
+                SrcBox.MinY = TexDesc.Height/4;
+                SrcBox.MinZ = ( TexDesc.Type == RESOURCE_DIM_TEX_3D ) ? TexDesc.Depth/4 : 0;
+                SrcBox.MaxX = std::max(TexDesc.Width/3, SrcBox.MinX+1);
+                SrcBox.MaxY = std::max(TexDesc.Height/3, SrcBox.MinY+1);
+                SrcBox.MaxZ = ( TexDesc.Type == RESOURCE_DIM_TEX_3D ) ? std::max(TexDesc.Depth/3, SrcBox.MinZ+1) : 1;
+                //pTestTex2->UpdateData(m_pDeviceContext, 0, 0, DstBox, SubResources[0]);
+                CopyTextureAttribs CopyAttribs(pTestTex2, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, pTestTex, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+                CopyAttribs.pSrcBox = &SrcBox;
+                m_pDeviceContext->CopyTexture(CopyAttribs);
+            }
         }
 
         const auto &DeviceCaps = m_pDevice->GetDeviceCaps();
         const auto &TextureCaps = DeviceCaps.TexCaps;
-        if( TextureCaps.bTextureViewSupported )
+
+        if (!TextureCaps.bTextureViewSupported)
+        {
+            LOG_WARNING_MESSAGE_ONCE("Texture views are not supported!\n");
+        }
+
+        if (TextureCaps.bTextureViewSupported && !m_pDevice->GetTextureFormatInfo(TexDesc.Format).IsTypeless)
         {
             TextureViewDesc ViewDesc;
             ViewDesc.TextureDim = TexDesc.Type;
@@ -318,7 +328,8 @@ private:
                     ViewDesc.FirstDepthSlice = 3;
                     ViewDesc.NumDepthSlices = 4;
                 }
-                else if( DeviceCaps.DevType == DeviceType::Vulkan && ViewDesc.ViewType != TEXTURE_VIEW_RENDER_TARGET && ViewDesc.ViewType != TEXTURE_VIEW_DEPTH_STENCIL || DeviceCaps.DevType != DeviceType::Vulkan)
+                else if( (DeviceCaps.DevType == DeviceType::Vulkan && ViewDesc.ViewType != TEXTURE_VIEW_RENDER_TARGET && ViewDesc.ViewType != TEXTURE_VIEW_DEPTH_STENCIL) ||
+                          DeviceCaps.DevType != DeviceType::Vulkan)
                 {
                     // OpenGL cannot create views for separate depth slices
                     ViewDesc.FirstDepthSlice = 0;
@@ -363,22 +374,15 @@ private:
                 pTestTex->CreateView( ViewDesc, &pUAV );
             }
         }
-        else
-        {
-            static bool FirstTime = true;
-            if( FirstTime )
-            {
-                LOG_WARNING_MESSAGE("Texture views are not supported!\n");
-                FirstTime = false;
-            }
-        }
-        
+
         // It is necessary to call Flush() to force the driver to release the resources.
         // Without flushing the command buffer, the memory is not released until sometimes 
         // later causing out-of-memory error
         m_pDeviceContext->Flush();
         // Also call FinishFrame() because otherwise resources will not be released
         m_pDeviceContext->FinishFrame();
+
+        m_pDevice->ReleaseStaleResources();
     }
     
 
@@ -419,7 +423,7 @@ private:
 
         const auto &DeviceCaps = m_pDevice->GetDeviceCaps();
         const auto &TextureCaps = DeviceCaps.TexCaps;
-        if( TextureCaps.bTextureViewSupported )
+        if( TextureCaps.bTextureViewSupported && !m_pDevice->GetTextureFormatInfo(TexDesc.Format).IsTypeless )
         {
             TextureViewDesc ViewDesc;
             if( TexDesc.BindFlags & BIND_SHADER_RESOURCE )
@@ -554,7 +558,7 @@ private:
     }
     IRenderDevice *m_pDevice;
     IDeviceContext *m_pDeviceContext;
-    Uint32 m_BindFlags;
+    BIND_FLAGS m_BindFlags;
     TEXTURE_FORMAT m_TextureFormat;
     Uint32 m_PixelSize;
     Bool m_bTestDataUpload;
@@ -568,27 +572,29 @@ TestTextureCreation::TestTextureCreation( IRenderDevice *pDevice, IDeviceContext
     TestTextureFormatAttribs();
 
     TextureCreationVerifier Verifier(pDevice, pContext);
-    const Uint32 BindSRU = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET | BIND_UNORDERED_ACCESS;
-    const Uint32 BindSR = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET;
-    //const Uint32 BindSD = BIND_SHADER_RESOURCE | BIND_DEPTH_STENCIL;
-    const Uint32 BindSU = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
-    const Uint32 BindD = BIND_DEPTH_STENCIL;
-    const Uint32 BindS = BIND_SHADER_RESOURCE;
+    const BIND_FLAGS BindSRU = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET | BIND_UNORDERED_ACCESS;
+    const BIND_FLAGS BindSR = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET;
+    //const BIND_FLAGS BindSD = BIND_SHADER_RESOURCE | BIND_DEPTH_STENCIL;
+    const BIND_FLAGS BindSU = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+    const BIND_FLAGS BindSD = BIND_SHADER_RESOURCE | BIND_DEPTH_STENCIL;
+    const BIND_FLAGS BindD = BIND_DEPTH_STENCIL;
+    const BIND_FLAGS BindS = BIND_SHADER_RESOURCE;
 
     struct TextureTestAttribs
     {
         TEXTURE_FORMAT Fmt;
         Uint32 PixelSize;
-        Uint32 BindFlags;
+        BIND_FLAGS BindFlags;
         Bool TestDataUpload;
         const char* Name;
     };
 
     const TextureTestAttribs TestAttribs[] =
     {
-        {TEX_FORMAT_RGBA32_FLOAT,   16, BindSRU, true, "RGBA32_FLOAT"},
-        {TEX_FORMAT_RGBA32_UINT,    16, BindSRU, true, "RGBA32_UINT"},
-        {TEX_FORMAT_RGBA32_SINT,    16, BindSRU, true, "RGBA32_SINT"},
+        {TEX_FORMAT_RGBA32_TYPELESS, 16, BindSRU, true, "RGBA32_TYPELESS"},
+        {TEX_FORMAT_RGBA32_FLOAT,    16, BindSRU, true, "RGBA32_FLOAT"},
+        {TEX_FORMAT_RGBA32_UINT,     16, BindSRU, true, "RGBA32_UINT"},
+        {TEX_FORMAT_RGBA32_SINT,     16, BindSRU, true, "RGBA32_SINT"},
         //{TEX_FORMAT_RGB32_TYPELESS,          , 5, "RGB32_TYPELESS"},
 
         // These formats are ill-supported
@@ -596,60 +602,60 @@ TestTextureCreation::TestTextureCreation( IRenderDevice *pDevice, IDeviceContext
         //{TEX_FORMAT_RGB32_UINT,     12, BindS, true, "RGB32_UINT"},
         //{TEX_FORMAT_RGB32_SINT,     12, BindS, true, "RGB32_SINT"},
 
-      //{TEX_FORMAT_RGBA16_TYPELESS,   8, BindSRU, true, "RGBA16_TYPELESS"},
+        {TEX_FORMAT_RGBA16_TYPELESS,   8, BindSRU, true, "RGBA16_TYPELESS"},
         {TEX_FORMAT_RGBA16_FLOAT,      8, BindSRU, true, "RGBA16_FLOAT"},
         {TEX_FORMAT_RGBA16_UNORM,      8, BindSRU, true, "RGBA16_UNORM"},
         {TEX_FORMAT_RGBA16_UINT,       8, BindSRU, true, "RGBA16_UINT"},
         {TEX_FORMAT_RGBA16_SNORM,      8, BindSU, true, "RGBA16_SNORM"},
         {TEX_FORMAT_RGBA16_SINT,       8, BindSRU, true, "RGBA16_SINT"},
                                        
-      //{TEX_FORMAT_RG32_TYPELESS,     8, BindSRU, true, "RG32_TYPELESS"},
+        {TEX_FORMAT_RG32_TYPELESS,     8, BindSRU, true, "RG32_TYPELESS"},
         {TEX_FORMAT_RG32_FLOAT,        8, BindSRU, true, "RG32_FLOAT"},
         {TEX_FORMAT_RG32_UINT,         8, BindSRU, true, "RG32_UINT"},
         {TEX_FORMAT_RG32_SINT,         8, BindSRU, true, "RG32_SINT"},
 
-      //{TEX_FORMAT_R32G8X24_TYPELESS,        8, BindD, false, "R32G8X24_TYPELESS"},
+        {TEX_FORMAT_R32G8X24_TYPELESS,        8, BindD, false, "R32G8X24_TYPELESS"},
         {TEX_FORMAT_D32_FLOAT_S8X24_UINT,     8, BindD, false, "D32_FLOAT_S8X24_UINT"},
-      //{TEX_FORMAT_R32_FLOAT_X8X24_TYPELESS, 8, BindD, false, "R32_FLOAT_X8X24_TYPELESS"},
-      //{TEX_FORMAT_X32_TYPELESS_G8X24_UINT,  8, BindD, false, "X32_TYPELESS_G8X24_UINT"},
+        //{TEX_FORMAT_R32_FLOAT_X8X24_TYPELESS, 8, BindD, false, "R32_FLOAT_X8X24_TYPELESS"},
+        //{TEX_FORMAT_X32_TYPELESS_G8X24_UINT,  8, BindD, false, "X32_TYPELESS_G8X24_UINT"},
 
-      //{TEX_FORMAT_RGB10A2_TYPELESS,        4, BindSRU, true, "RGB10A2_TYPELESS"},
-        {TEX_FORMAT_RGB10A2_UNORM,           4, BindSR,   true, "RGB10A2_UNORM"},
-        {TEX_FORMAT_RGB10A2_UINT,            4, BindS,    true, "RGB10A2_UINT"},
+        {TEX_FORMAT_RGB10A2_TYPELESS,        4, BindSR,  true, "RGB10A2_TYPELESS"},
+        {TEX_FORMAT_RGB10A2_UNORM,           4, BindSR,  true, "RGB10A2_UNORM"},
+        {TEX_FORMAT_RGB10A2_UINT,            4, BindS,   true, "RGB10A2_UINT"},
         {TEX_FORMAT_R11G11B10_FLOAT,         4, BindSRU, false, "R11G11B10_FLOAT"},
 
-      //{TEX_FORMAT_RGBA8_TYPELESS,          4, BindSRU, true, "RGBA8_TYPELESS"},
+        {TEX_FORMAT_RGBA8_TYPELESS,          4, BindSRU, true, "RGBA8_TYPELESS"},
         {TEX_FORMAT_RGBA8_UNORM,             4, BindSRU, true, "RGBA8_UNORM"},
         {TEX_FORMAT_RGBA8_UNORM_SRGB,        4, BindSR,  true, "RGBA8_UNORM_SRGB"},
         {TEX_FORMAT_RGBA8_UINT,              4, BindSRU, true, "RGBA8_UINT"},
         {TEX_FORMAT_RGBA8_SNORM,             4, BindSU, true, "RGBA8_SNORM"},
         {TEX_FORMAT_RGBA8_SINT,              4, BindSRU, true, "RGBA8_SINT"},
 
-      //{TEX_FORMAT_RG16_TYPELESS,           4, BindSRU, true, "RG16_TYPELESS"},
+        {TEX_FORMAT_RG16_TYPELESS,           4, BindSRU, true, "RG16_TYPELESS"},
         {TEX_FORMAT_RG16_FLOAT,              4, BindSRU, true, "RG16_FLOAT"},
         {TEX_FORMAT_RG16_UNORM,              4, BindSRU, true, "RG16_UNORM"},
         {TEX_FORMAT_RG16_UINT,               4, BindSRU, true, "RG16_UINT"},
         {TEX_FORMAT_RG16_SNORM,              4, BindSU, true, "RG16_SNORM"},
         {TEX_FORMAT_RG16_SINT,               4, BindSRU, true, "RG16_SINT"},
 
-      //{TEX_FORMAT_R32_TYPELESS,            4, BindSRU, true, "R32_TYPELESS"},
+        {TEX_FORMAT_R32_TYPELESS,            4, BindSRU, true, "R32_TYPELESS"},
         {TEX_FORMAT_D32_FLOAT,               4, BindD,   true, "D32_FLOAT"},
         {TEX_FORMAT_R32_FLOAT,               4, BindSRU, true, "R32_FLOAT"},
         {TEX_FORMAT_R32_UINT,                4, BindSRU, true, "R32_UINT"},
         {TEX_FORMAT_R32_SINT,                4, BindSRU, true, "R32_SINT"},
 
-      //{TEX_FORMAT_R24G8_TYPELESS,          4, BindD, true, "R24G8_TYPELESS"},
-        {TEX_FORMAT_D24_UNORM_S8_UINT,       4, BindD, false,"D24_UNORM_S8_UINT"},
-      //{TEX_FORMAT_R24_UNORM_X8_TYPELESS,   4, BindD, true, "R24_UNORM_X8_TYPELESS"},
-      //{TEX_FORMAT_X24_TYPELESS_G8_UINT,    4, BindD, true, "X24_TYPELESS_G8_UINT"},
+        {TEX_FORMAT_R24G8_TYPELESS,          4, BindSD, false, "R24G8_TYPELESS"},
+        {TEX_FORMAT_D24_UNORM_S8_UINT,       4, BindD,  false, "D24_UNORM_S8_UINT"},
+      //{TEX_FORMAT_R24_UNORM_X8_TYPELESS,   4, BindD,   true, "R24_UNORM_X8_TYPELESS"},
+      //{TEX_FORMAT_X24_TYPELESS_G8_UINT,    4, BindD,   true, "X24_TYPELESS_G8_UINT"},
                                                        
-      //{TEX_FORMAT_RG8_TYPELESS,            2, BindSRU, true, "RG8_TYPELESS"},
+        {TEX_FORMAT_RG8_TYPELESS,            2, BindSRU, true, "RG8_TYPELESS"},
         {TEX_FORMAT_RG8_UNORM,               2, BindSRU, true, "RG8_UNORM"},
         {TEX_FORMAT_RG8_UINT,                2, BindSRU, true, "RG8_UINT"},
-        {TEX_FORMAT_RG8_SNORM,               2, BindSU, true, "RG8_SNORM"},
+        {TEX_FORMAT_RG8_SNORM,               2, BindSU,  true, "RG8_SNORM"},
         {TEX_FORMAT_RG8_SINT,                2, BindSRU, true, "RG8_SINT"},
 
-      //{TEX_FORMAT_R16_TYPELESS,            2, BindSRU, true, "R16_TYPELESS"},
+        {TEX_FORMAT_R16_TYPELESS,            2, BindSRU, true, "R16_TYPELESS"},
         {TEX_FORMAT_R16_FLOAT,               2, BindSRU, true, "R16_FLOAT"},
         {TEX_FORMAT_D16_UNORM,               2, BindD,   true, "D16_UNORM"},
         {TEX_FORMAT_R16_UNORM,               2, BindSRU, true, "R16_UNORM"},
@@ -657,7 +663,7 @@ TestTextureCreation::TestTextureCreation( IRenderDevice *pDevice, IDeviceContext
         {TEX_FORMAT_R16_SNORM,               2, BindSU, true, "R16_SNORM"},
         {TEX_FORMAT_R16_SINT,                2, BindSRU, true, "R16_SINT"},
 
-      //{TEX_FORMAT_R8_TYPELESS,             1, BindSRU, true, "R8_TYPELESS"},
+        {TEX_FORMAT_R8_TYPELESS,             1, BindSRU, true, "R8_TYPELESS"},
         {TEX_FORMAT_R8_UNORM,                1, BindSRU, true, "R8_UNORM"},
         {TEX_FORMAT_R8_UINT,                 1, BindSRU, true, "R8_UINT"},
         {TEX_FORMAT_R8_SNORM,                1, BindSU, true, "R8_SNORM"},
@@ -691,8 +697,8 @@ TestTextureCreation::TestTextureCreation( IRenderDevice *pDevice, IDeviceContext
       //{TEX_FORMAT_BGRX8_UNORM,             4, BindSRU, true, "BGRX8_UNORM"},
       //{TEX_FORMAT_R10G10B10_XR_BIAS_A2_UNORM, 4, BindS, false, "R10G10B10_XR_BIAS_A2_UNORM"},
 
-      //{TEX_FORMAT_BGRA8_TYPELESS,          4, BindSRU, true, "BGRA8_TYPELESS"},
-      //{TEX_FORMAT_BGRA8_UNORM_SRGB,        4, BindSR,  true, "BGRA8_UNORM_SRGB",},
+      {TEX_FORMAT_BGRA8_TYPELESS,          4, BindSRU, true, "BGRA8_TYPELESS"},
+      {TEX_FORMAT_BGRA8_UNORM_SRGB,        4, BindSR,  true, "BGRA8_UNORM_SRGB",},
       //{TEX_FORMAT_BGRX8_TYPELESS,          4, BindSRU, true, "BGRX8_TYPELESS"},
       //{TEX_FORMAT_BGRX8_UNORM_SRGB,        4, BindSR,  true, "BGRX8_UNORM_SRGB",},
 
@@ -713,7 +719,7 @@ TestTextureCreation::TestTextureCreation( IRenderDevice *pDevice, IDeviceContext
             continue;
         }
         ++m_NumFormatsTested;
-        assert(CurrAttrs.PixelSize == Uint32{PixelFormatAttribs.ComponentSize} * PixelFormatAttribs.NumComponents || 
+        assert(CurrAttrs.PixelSize == Uint32{PixelFormatAttribs.ComponentSize} * Uint32{PixelFormatAttribs.NumComponents} || 
                PixelFormatAttribs.ComponentType == COMPONENT_TYPE_COMPRESSED);
         Verifier.Test(CurrAttrs.Fmt, CurrAttrs.PixelSize, CurrAttrs.BindFlags, CurrAttrs.TestDataUpload);
     }
@@ -727,7 +733,7 @@ void TestTextureCreation::CheckFormatSize(TEXTURE_FORMAT *begin, TEXTURE_FORMAT 
     for(auto fmt = begin; fmt != end; ++fmt)
     {
         auto FmtAttrs = m_pDevice->GetTextureFormatInfo(*fmt);
-        assert(Uint32{FmtAttrs.ComponentSize} * FmtAttrs.NumComponents == RefSize);
+        assert(Uint32{FmtAttrs.ComponentSize} * Uint32{FmtAttrs.NumComponents} == RefSize);
     }
 }
 

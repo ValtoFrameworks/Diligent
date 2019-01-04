@@ -105,31 +105,21 @@ PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/CompiledShaders
 )
 
+get_supported_backends(ENGINE_LIBRARIES)
+
 target_link_libraries(Asteroids
 PRIVATE
     BuildSettings
-    GraphicsEngineD3D11-shared 
-    GraphicsEngineD3D12-shared
-    GraphicsEngineOpenGL-shared
     TargetPlatform
     TextureLoader
     Common
     GraphicsTools
-    d3dcompiler.lib
-    d3d12.lib
-    d3d11.lib
+    ${ENGINE_LIBRARIES}
     ninput.lib
     winmm.lib
     dxgi.lib
     shcore.lib
 )
-
-if(VULKAN_SUPPORTED)
-    target_link_libraries(Asteroids
-    PRIVATE
-        GraphicsEngineVk-shared
-    )
-endif()
 
 set_common_target_properties(Asteroids)
 

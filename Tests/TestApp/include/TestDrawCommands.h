@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -44,4 +44,5 @@ private:
     Diligent::RefCntAutoPtr<Diligent::IPipelineState> m_pPSO, m_pPSO_2xStride, m_pPSOInst;
     Diligent::RefCntAutoPtr<Diligent::IBuffer> m_pVertexBuff, m_pVertexBuff2, m_pIndexBuff, m_pInstanceData, m_pIndirectDrawArgs, m_pIndexedIndirectDrawArgs;
     Diligent::RefCntAutoPtr<Diligent::IResourceMapping> m_pResMapping;
+    Diligent::RefCntAutoPtr<Diligent::IShaderResourceBinding> m_pSRB, m_pSRBInst;
 };

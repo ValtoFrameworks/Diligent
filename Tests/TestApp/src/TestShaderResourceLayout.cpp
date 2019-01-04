@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ TestShaderResourceLayout::TestShaderResourceLayout( IRenderDevice *pDevice, IDev
 {
     if (pDevice->GetDeviceCaps().DevType != DeviceType::Vulkan)
     {
+        SetStatus(TestResult::Skipped);
         return;
     }
 
@@ -43,7 +44,7 @@ TestShaderResourceLayout::TestShaderResourceLayout( IRenderDevice *pDevice, IDev
     BasicShaderSourceStreamFactory BasicSSSFactory("Shaders");
     CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
     CreationAttrs.EntryPoint = "main";
-
+    CreationAttrs.UseCombinedTextureSamplers = false;
 
     RefCntAutoPtr<ISampler> pSamplers[4];
     IDeviceObject *pSams[4];
@@ -84,9 +85,9 @@ TestShaderResourceLayout::TestShaderResourceLayout( IRenderDevice *pDevice, IDev
     RefCntAutoPtr<ITexture> pRenderTarget;
     pDevice->CreateTexture(TexDesc, TextureData{}, &pRenderTarget);
     auto *pRTV = pRenderTarget->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
-    m_pDeviceContext->SetRenderTargets(1, &pRTV, nullptr);
+    m_pDeviceContext->SetRenderTargets(1, &pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     float Zero[4] = {};
-    m_pDeviceContext->ClearRenderTarget(pRTV, Zero);
+    m_pDeviceContext->ClearRenderTarget(pRTV, Zero, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 
     BufferDesc BuffDesc;
     BuffDesc.uiSizeInBytes = 1024;
@@ -111,24 +112,32 @@ TestShaderResourceLayout::TestShaderResourceLayout( IRenderDevice *pDevice, IDev
     }
 
     RefCntAutoPtr<IBuffer> pUniformTexelBuff, pStorageTexelBuff;
-    IBufferView *pUniformTexelBuffSRV = nullptr, *pStorageTexelBuffUAV = nullptr;
+    RefCntAutoPtr<IBufferView> pUniformTexelBuffSRV , pStorageTexelBuffUAV;
     {
-        Diligent::BufferDesc TxlBuffDesc;
+        BufferDesc TxlBuffDesc;
         TxlBuffDesc.Name = "Uniform texel buffer test";
         TxlBuffDesc.uiSizeInBytes = 256;
-        TxlBuffDesc.BindFlags = BIND_SHADER_RESOURCE;
+        TxlBuffDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
         TxlBuffDesc.Usage = USAGE_DEFAULT;
-        TxlBuffDesc.Format.ValueType = VT_FLOAT32;
-        TxlBuffDesc.Format.NumComponents = 4;
-        TxlBuffDesc.Format.IsNormalized = false;
+        TxlBuffDesc.ElementByteStride = 16;
         TxlBuffDesc.Mode = BUFFER_MODE_FORMATTED;
         pDevice->CreateBuffer(TxlBuffDesc, BufferData{}, &pUniformTexelBuff);
-        pUniformTexelBuffSRV = pUniformTexelBuff->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE);
+
+        BufferViewDesc TxlBuffViewDesc;
+        TxlBuffViewDesc.Name = "Uniform texel buffer SRV";
+        TxlBuffViewDesc.ViewType = BUFFER_VIEW_SHADER_RESOURCE;
+        TxlBuffViewDesc.Format.ValueType = VT_FLOAT32;
+        TxlBuffViewDesc.Format.NumComponents = 4;
+        TxlBuffViewDesc.Format.IsNormalized = false;
+        pUniformTexelBuff->CreateView(TxlBuffViewDesc, &pUniformTexelBuffSRV);
 
         TxlBuffDesc.Name = "Storage texel buffer test";
         TxlBuffDesc.BindFlags = BIND_UNORDERED_ACCESS;
         pDevice->CreateBuffer(TxlBuffDesc, BufferData{}, &pStorageTexelBuff);
-        pStorageTexelBuffUAV = pStorageTexelBuff->GetDefaultView(BUFFER_VIEW_UNORDERED_ACCESS);
+        
+        TxlBuffViewDesc.Name = "Storage texel buffer UAV";
+        TxlBuffViewDesc.ViewType = BUFFER_VIEW_UNORDERED_ACCESS;
+        pUniformTexelBuff->CreateView(TxlBuffViewDesc, &pStorageTexelBuffUAV);
     }
     
     ResourceMappingDesc ResMappingDesc;
@@ -243,7 +252,7 @@ TestShaderResourceLayout::TestShaderResourceLayout( IRenderDevice *pDevice, IDev
         pVS->GetShaderVariable("g_StorageTexelBuff")->Set(pStorageTexelBuffUAV);
         pVS->GetShaderVariable("g_tex2D_Mut");
         LOG_INFO_MESSAGE("The above 2 warnings and 1 errors about missing shader resources are part of the test");
-        pVS->BindResources(pResMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+        pVS->BindResources(pResMapping, BIND_SHADER_RESOURCES_KEEP_EXISTING | BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED | BIND_SHADER_RESOURCES_UPDATE_STATIC);
     }
 
     {
@@ -282,7 +291,7 @@ TestShaderResourceLayout::TestShaderResourceLayout( IRenderDevice *pDevice, IDev
         pPS->GetShaderVariable("g_StorageTexelBuff")->Set(pStorageTexelBuffUAV);
         pPS->GetShaderVariable("storageBuff_Dyn");
         LOG_INFO_MESSAGE("The above 2 warnings and 1 errors about missing shader resources are part of the test");
-        pPS->BindResources(pResMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+        pPS->BindResources(pResMapping, BIND_SHADER_RESOURCES_KEEP_EXISTING | BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED | BIND_SHADER_RESOURCES_UPDATE_STATIC);
     }
 
     {
@@ -312,7 +321,7 @@ TestShaderResourceLayout::TestShaderResourceLayout( IRenderDevice *pDevice, IDev
     VERIFY_EXPR(pTestPSO);
 
     RefCntAutoPtr<IShaderResourceBinding> pSRB;
-    pTestPSO->CreateShaderResourceBinding(&pSRB);
+    pTestPSO->CreateShaderResourceBinding(&pSRB, true);
 
     pSRB->GetVariable(SHADER_TYPE_VERTEX, "UniformBuff_Stat");
     pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_sepTex2DArr_static");
@@ -378,13 +387,12 @@ TestShaderResourceLayout::TestShaderResourceLayout( IRenderDevice *pDevice, IDev
     pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_UniformTexelBuff_mut")->Set(pUniformTexelBuffSRV);
     pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_StorageTexelBuff_mut")->Set(pStorageTexelBuffUAV);
 
-    pSRB->BindResources(SHADER_TYPE_PIXEL | SHADER_TYPE_VERTEX, pResMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+    pSRB->BindResources(SHADER_TYPE_PIXEL | SHADER_TYPE_VERTEX, pResMapping, BIND_SHADER_RESOURCES_KEEP_EXISTING | BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED | BIND_SHADER_RESOURCES_UPDATE_MUTABLE | BIND_SHADER_RESOURCES_UPDATE_DYNAMIC);
 
     pContext->SetPipelineState(pTestPSO);
-    pContext->CommitShaderResources(pSRB, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    pContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
-    DrawAttribs DrawAttrs;
-    DrawAttrs.NumVertices = 3;
+    DrawAttribs DrawAttrs(3, DRAW_FLAG_VERIFY_STATES);
     pContext->Draw(DrawAttrs);
 
     pSRB->GetVariable(SHADER_TYPE_PIXEL, "storageBuff_Dyn")->Set(pSBUAVs[1]);
@@ -393,7 +401,7 @@ TestShaderResourceLayout::TestShaderResourceLayout( IRenderDevice *pDevice, IDev
     pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_SamArr_dyn")->SetArray(pSams+1, 1, 3);
     pSRB->GetVariable(SHADER_TYPE_PIXEL, "UniformBuff_Dyn")->Set(pUBs[1]);
     pSRB->GetVariable(SHADER_TYPE_VERTEX, "g_tex2DStorageImgArr_Dyn")->SetArray(pUAVs+1, 1, 1);
-    pContext->CommitShaderResources(pSRB, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    pContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     pContext->Draw(DrawAttrs);
 
     {

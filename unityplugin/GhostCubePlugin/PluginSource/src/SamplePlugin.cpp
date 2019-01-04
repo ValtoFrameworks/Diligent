@@ -63,6 +63,7 @@ SamplePlugin::SamplePlugin(Diligent::IRenderDevice *pDevice, bool UseReverseZ, T
         ShaderCreationAttribs CreationAttribs;
         CreationAttribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
         CreationAttribs.Desc.DefaultVariableType = SHADER_VARIABLE_TYPE_STATIC;
+        CreationAttribs.UseCombinedTextureSamplers = true;
 
         CreateUniformBuffer(pDevice, sizeof(float4x4), "SamplePlugin: VS constants CB", &m_VSConstants);
 
@@ -96,6 +97,7 @@ SamplePlugin::SamplePlugin(Diligent::IRenderDevice *pDevice, bool UseReverseZ, T
         PSODesc.GraphicsPipeline.InputLayout.LayoutElements = LayoutElems;
         PSODesc.GraphicsPipeline.InputLayout.NumElements = _countof(LayoutElems);
         pDevice->CreatePipelineState(PSODesc, &m_PSO);
+        m_PSO->CreateShaderResourceBinding(&m_SRB, true);
     }
 
     {
@@ -158,15 +160,12 @@ void SamplePlugin::Render(Diligent::IDeviceContext *pContext, const float4x4 &Vi
 
     Uint32 offset = 0;
     IBuffer *pBuffs[] = {m_CubeVertexBuffer};
-    pContext->SetVertexBuffers(0, 1, pBuffs, &offset, SET_VERTEX_BUFFERS_FLAG_RESET);
-    pContext->SetIndexBuffer(m_CubeIndexBuffer, 0);
+    pContext->SetVertexBuffers(0, 1, pBuffs, &offset, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
+    pContext->SetIndexBuffer(m_CubeIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     pContext->SetPipelineState(m_PSO);
-    pContext->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    pContext->CommitShaderResources(m_SRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-    DrawAttribs DrawAttrs;
-    DrawAttrs.IsIndexed = true;
-    DrawAttrs.IndexType = VT_UINT32;
-    DrawAttrs.NumIndices = 36;
+    DrawAttribs DrawAttrs(36, VT_UINT32, DRAW_FLAG_VERIFY_STATES);
     pContext->Draw(DrawAttrs);
 }

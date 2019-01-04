@@ -13,6 +13,15 @@ if(PLATFORM_WIN32)
 
     function(add_win32_app TARGET_NAME SOURCE INCLUDE ASSETS)
         add_executable(${TARGET_NAME} WIN32 ${SOURCE} ${INCLUDE} ${ASSETS})
+        
+        if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+            # libmingw32 must be included BEFORE NativeAppBase that contains the definition of WinMain.
+            # otherwise WinMain will be stripped out of NativeAppBase and will be unresolved.
+            target_link_libraries(${TARGET_NAME}
+            PRIVATE
+                mingw32
+            )
+        endif()
     endfunction()
 
     function(add_target_platform_app TARGET_NAME SOURCE INCLUDE ASSETS)
@@ -112,7 +121,7 @@ elseif(PLATFORM_LINUX)
         add_linux_app("${TARGET_NAME}" "${SOURCE}" "${INCLUDE}" "${ASSETS}")
     endfunction()
 
-    
+
 elseif(PLATFORM_MACOS)
 
     set(SOURCE
@@ -131,6 +140,11 @@ elseif(PLATFORM_MACOS)
             ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/AppDelegate.m
             ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/FullscreenWindow.m
             ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/GLView.m
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/MetalView.m
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/MetalViewController.mm
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/GLViewController.mm
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/ViewControllerBase.mm
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/ModeSelectionViewController.mm
         )
         set_source_files_properties(${APPLE_SOURCE} PROPERTIES
             COMPILE_FLAGS "-x objective-c++"
@@ -141,11 +155,18 @@ elseif(PLATFORM_MACOS)
             ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/AppDelegate.h
             ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/FullscreenWindow.h
             ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/GLView.h
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/MetalView.h
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/MetalViewController.h
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/GLViewController.h
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/ViewControllerBase.h
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Source/Classes/OSX/ModeSelectionViewController.h
         )
 
         set(APPLE_RESOURCES
             ${NATIVE_APP_SOURCE_DIR}/Apple/Data/OSX/Base.lproj/Main.storyboard
             ${NATIVE_APP_SOURCE_DIR}/Apple/Data/OSX/Images.xcassets/AppIcon.appiconset/dg.icns
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Data/OSX/Images.xcassets/opengl-logo.png
+            ${NATIVE_APP_SOURCE_DIR}/Apple/Data/OSX/Images.xcassets/vulkan-logo.png
         )
 
         set(APPLE_INFO_PLIST
@@ -171,9 +192,21 @@ elseif(PLATFORM_MACOS)
 
         find_library(CORE_VIDEO CoreVideo)
         if (NOT CORE_VIDEO)
-                message(FATAL_ERROR "CoreVideo not found")
+                message(FATAL_ERROR "CoreVideo is not found")
         endif()
-        target_link_libraries(${TARGET_NAME} PRIVATE ${OPENGL_LIBRARY} ${CORE_VIDEO})
+        target_link_libraries(${TARGET_NAME} PRIVATE )
+
+        find_library(METAL_FRAMEWORK Metal)
+        if (NOT METAL_FRAMEWORK)
+            message(FATAL_ERROR "Metal framework is not found")
+        endif()
+
+        find_library(CORE_ANIMATION QuartzCore)
+        if (NOT CORE_ANIMATION)
+            message(FATAL_ERROR "QuartzCore (CoreAnimation) is not found")
+        endif()
+
+        target_link_libraries(${TARGET_NAME} PRIVATE ${OPENGL_LIBRARY} ${CORE_VIDEO} ${METAL_FRAMEWORK} ${CORE_ANIMATION})
 
     endfunction()
 
@@ -236,17 +269,17 @@ elseif(PLATFORM_IOS)
 
         find_library(OPENGLES OpenGLES)
             if (NOT OPENGLES)
-                message(FATAL_ERROR "OpenGLES not found")
+                message(FATAL_ERROR "OpenGLES is not found")
             endif()
 
         find_library(UIKIT UIKit)
         if (NOT UIKIT)
-                message(FATAL_ERROR "UIKIT not found")
+                message(FATAL_ERROR "UIKIT is not found")
         endif()
 
         find_library(CORE_ANIMATION QuartzCore)
         if (NOT CORE_ANIMATION)
-            message(FATAL_ERROR "QuartzCore (CoreAnimation) not found")
+            message(FATAL_ERROR "QuartzCore (CoreAnimation) is not found")
         endif()
 
         target_link_libraries(${TARGET_NAME} PRIVATE ${OPENGLES} ${UIKIT} ${CORE_ANIMATION})
@@ -322,7 +355,12 @@ elseif(PLATFORM_LINUX)
     PUBLIC 
         include/Linux
     )
-
+    if(VULKAN_SUPPORTED)
+        target_link_libraries(NativeAppBase
+        PRIVATE 
+            xcb
+        )
+    endif()
 elseif(PLATFORM_MACOS)
     target_include_directories(NativeAppBase PUBLIC
         src/MacOS

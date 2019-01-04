@@ -66,7 +66,7 @@ void RenderAPI_D3D11::ProcessDeviceEvent(UnityGfxDeviceEventType type, IUnityInt
 void RenderAPI_D3D11::BeginRendering()
 {
     ITextureView *RTVs[] = { m_RTV };
-    m_Context->SetRenderTargets(1, RTVs, m_DSV);
+    m_Context->SetRenderTargets(1, RTVs, m_DSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 }
 
 void RenderAPI_D3D11::AttachToNativeRenderTexture(void *nativeRenderTargetHandle, void *nativeDepthTextureHandle)
@@ -80,11 +80,11 @@ void RenderAPI_D3D11::AttachToNativeRenderTexture(void *nativeRenderTargetHandle
 
         auto *pd3d11RenderTarget = reinterpret_cast<ID3D11Texture2D *>(nativeRenderTargetHandle);
         RefCntAutoPtr<ITexture> pRenderTarget;
-        pDeviceD3D11->CreateTextureFromD3DResource(pd3d11RenderTarget, &pRenderTarget);
+        pDeviceD3D11->CreateTextureFromD3DResource(pd3d11RenderTarget, RESOURCE_STATE_UNDEFINED, &pRenderTarget);
 
         auto *pd3d11DepthBuffer = reinterpret_cast<ID3D11Texture2D *>(nativeDepthTextureHandle);
         RefCntAutoPtr<ITexture> pDepthBuffer;
-        pDeviceD3D11->CreateTextureFromD3DResource(pd3d11DepthBuffer, &pDepthBuffer);
+        pDeviceD3D11->CreateTextureFromD3DResource(pd3d11DepthBuffer, RESOURCE_STATE_UNDEFINED, &pDepthBuffer);
 
         CreateTextureViews(pRenderTarget, pDepthBuffer);
     }

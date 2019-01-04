@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ void TestCreateObjFromNativeResD3D12::CreateTexture(Diligent::ITexture *pTexture
     RefCntAutoPtr<ITextureD3D12> pTextureD3D12(pTexture, IID_TextureD3D12);
     auto *pD3D12Texture = pTextureD3D12->GetD3D12Texture();
     RefCntAutoPtr<ITexture> pTextureFromNativeD3D12Handle;
-    pDeviceD3D12->CreateTextureFromD3DResource(pD3D12Texture, &pTextureFromNativeD3D12Handle);
+    pDeviceD3D12->CreateTextureFromD3DResource(pD3D12Texture, RESOURCE_STATE_UNKNOWN, &pTextureFromNativeD3D12Handle);
     ++m_NumTexturesCreated;
     
     auto TestTexDesc = pTextureFromNativeD3D12Handle->GetDesc();
@@ -64,7 +64,7 @@ void TestCreateObjFromNativeResD3D12::CreateBuffer(Diligent::IBuffer *pBuffer)
     
     {
         RefCntAutoPtr<IBuffer> pBufferFromNativeD3D12Handle;
-        pDeviceD3D12->CreateBufferFromD3DResource(pD3D12Buffer, SrcBuffDesc, &pBufferFromNativeD3D12Handle);
+        pDeviceD3D12->CreateBufferFromD3DResource(pD3D12Buffer, SrcBuffDesc, RESOURCE_STATE_UNKNOWN, &pBufferFromNativeD3D12Handle);
         ++m_NumBuffersCreated;
         
         const auto &TestBufferDesc = pBufferFromNativeD3D12Handle->GetDesc();

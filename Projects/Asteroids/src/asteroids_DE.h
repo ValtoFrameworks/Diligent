@@ -14,7 +14,7 @@
 #include "SwapChain.h"
 #include "DeviceContext.h"
 #include "RefCntAutoPtr.h"
-#include "LockHelper.h"
+#include "ThreadSignal.h"
 #include <map>
 #include <mutex>
 #include <atomic>
@@ -106,8 +106,11 @@ private:
     Diligent::RefCntAutoPtr<Diligent::IPipelineState>  mFontPSO;
     Diligent::RefCntAutoPtr<Diligent::IPipelineState>  mSpritePSO;
     Diligent::RefCntAutoPtr<Diligent::IShaderResourceBinding> mSpriteSRB;
+    Diligent::RefCntAutoPtr<Diligent::IShaderResourceBinding> mFontSRB;
+    
 
     Diligent::RefCntAutoPtr<Diligent::IPipelineState>  mSkyboxPSO;
+    Diligent::RefCntAutoPtr<Diligent::IShaderResourceBinding> mSkyboxSRB;
 
     std::map<std::string, Diligent::RefCntAutoPtr<Diligent::ITextureView>> mSpriteTextures;
     Diligent::RefCntAutoPtr<Diligent::ITextureView> mSkyboxSRV;

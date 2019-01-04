@@ -90,10 +90,10 @@ void Asteroids::InitDevice(HWND hWnd, DeviceType DevType)
             {
                 EngineD3D12Attribs Attribs;
                 Attribs.GPUDescriptorHeapDynamicSize[0] = 65536*4;
-                Attribs.GPUDescriptorHeapSize[0] = 65536*4;
+                Attribs.GPUDescriptorHeapSize[0] = 65536; // For mutable mode
                 Attribs.NumCommandsToFlushCmdList = 1024;
 #ifndef _DEBUG
-                Attribs.DynamicDescriptorAllocationChunkSize[0] = 4*2048;
+                Attribs.DynamicDescriptorAllocationChunkSize[0] = 8192;
 #endif
 #if ENGINE_DLL
                 if(!GetEngineFactoryD3D12)
@@ -107,7 +107,7 @@ void Asteroids::InitDevice(HWND hWnd, DeviceType DevType)
             else if(DevType == DeviceType::Vulkan)
             {
                 EngineVkAttribs Attribs;
-                Attribs.DynamicHeapSize = 32 << 20;
+                Attribs.DynamicHeapSize = 64 << 20;
 #if ENGINE_DLL
                 if(!GetEngineFactoryVulkan)
                     LoadGraphicsEngineVk(GetEngineFactoryVulkan);
@@ -184,6 +184,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
     
     BasicShaderSourceStreamFactory BasicSSSFactory({"src"});
 
+    std::vector<StateTransitionDesc> Barriers;
     mBackBufferWidth = mSwapChain->GetDesc().Width;
     mBackBufferHeight = mSwapChain->GetDesc().Height;
     // Create draw constant buffer
@@ -195,6 +196,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         desc.BindFlags = BIND_UNIFORM_BUFFER;
         desc.CPUAccessFlags = CPU_ACCESS_WRITE;
         mDevice->CreateBuffer(desc, BufferData(), &mDrawConstantBuffer);
+        Barriers.emplace_back(mDrawConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, true);
     }
 
     // create pipeline state
@@ -220,6 +222,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
             attribs.FilePath = "asteroid_vs.hlsl";
             attribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
             attribs.pShaderSourceStreamFactory = &BasicSSSFactory;
+            attribs.UseCombinedTextureSamplers = true;
             mDevice->CreateShader(attribs, &vs);
             vs->GetShaderVariable("DrawConstantBuffer")->Set(mDrawConstantBuffer);
         }
@@ -232,22 +235,23 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
             attribs.EntryPoint = "asteroid_ps_d3d11";
             attribs.FilePath = "asteroid_ps_d3d11.hlsl";
             attribs.pShaderSourceStreamFactory = &BasicSSSFactory;
+            attribs.UseCombinedTextureSamplers = true;
             attribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
 
             StaticSamplerDesc samDesc;
-            samDesc.Desc.MagFilter      = FILTER_TYPE_ANISOTROPIC;
-            samDesc.Desc.MinFilter      = FILTER_TYPE_ANISOTROPIC;
-            samDesc.Desc.MipFilter      = FILTER_TYPE_ANISOTROPIC;
-            samDesc.Desc.AddressU       = TEXTURE_ADDRESS_WRAP;
-            samDesc.Desc.AddressV       = TEXTURE_ADDRESS_WRAP;
-            samDesc.Desc.AddressW       = TEXTURE_ADDRESS_WRAP;
-            samDesc.Desc.MinLOD         = -D3D11_FLOAT32_MAX;
-            samDesc.Desc.MaxLOD         = D3D11_FLOAT32_MAX;
-            samDesc.Desc.MipLODBias     = 0.0f;
-            samDesc.Desc.MaxAnisotropy  = TEXTURE_ANISO;
-            samDesc.Desc.ComparisonFunc = COMPARISON_FUNC_NEVER;
-            samDesc.TextureName = "Tex";
-            attribs.Desc.StaticSamplers = &samDesc;
+            samDesc.Desc.MagFilter       = FILTER_TYPE_ANISOTROPIC;
+            samDesc.Desc.MinFilter       = FILTER_TYPE_ANISOTROPIC;
+            samDesc.Desc.MipFilter       = FILTER_TYPE_ANISOTROPIC;
+            samDesc.Desc.AddressU        = TEXTURE_ADDRESS_WRAP;
+            samDesc.Desc.AddressV        = TEXTURE_ADDRESS_WRAP;
+            samDesc.Desc.AddressW        = TEXTURE_ADDRESS_WRAP;
+            samDesc.Desc.MinLOD          = -D3D11_FLOAT32_MAX;
+            samDesc.Desc.MaxLOD          = D3D11_FLOAT32_MAX;
+            samDesc.Desc.MipLODBias      = 0.0f;
+            samDesc.Desc.MaxAnisotropy   = TEXTURE_ANISO;
+            samDesc.Desc.ComparisonFunc  = COMPARISON_FUNC_NEVER;
+            samDesc.SamplerOrTextureName = "Tex";
+            attribs.Desc.StaticSamplers  = &samDesc;
             attribs.Desc.NumStaticSamplers = 1;
 
             mDevice->CreateShader(attribs, &ps);
@@ -279,7 +283,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         mAsteroidsSRBs.resize(NumSRBs);
         for(size_t srb = 0; srb < mAsteroidsSRBs.size(); ++srb)
         {
-            mAsteroidsPSO->CreateShaderResourceBinding(&mAsteroidsSRBs[srb]);
+            mAsteroidsPSO->CreateShaderResourceBinding(&mAsteroidsSRBs[srb], true);
         }
     }
 
@@ -291,6 +295,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         RefCntAutoPtr<ITexture> skybox;
         CreateTextureFromFile("starbox_1024.dds", loadInfo, mDevice, &skybox);
         mSkyboxSRV = skybox->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+        Barriers.emplace_back(skybox, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, true);
     }
 
     // Create skybox constant buffer
@@ -302,6 +307,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         desc.BindFlags = BIND_UNIFORM_BUFFER;
         desc.CPUAccessFlags = CPU_ACCESS_WRITE;
         mDevice->CreateBuffer(desc, BufferData(), &mSkyboxConstantBuffer);
+        Barriers.emplace_back(mSkyboxConstantBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_CONSTANT_BUFFER, true);
     }
 
     // create skybox pipeline state
@@ -319,6 +325,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         attribs.EntryPoint = "skybox_vs";
         attribs.FilePath = "skybox_vs.hlsl";
         attribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+        attribs.UseCombinedTextureSamplers = true;
         attribs.pShaderSourceStreamFactory = &BasicSSSFactory;
         mDevice->CreateShader(attribs, &vs);
         vs->GetShaderVariable("SkyboxConstantBuffer")->Set(mSkyboxConstantBuffer);
@@ -329,14 +336,14 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         attribs.Desc.ShaderType = SHADER_TYPE_PIXEL;
 
         StaticSamplerDesc ssdesc;
-        ssdesc.TextureName = "Skybox";
-        ssdesc.Desc.MagFilter      = FILTER_TYPE_ANISOTROPIC;
-        ssdesc.Desc.MinFilter      = FILTER_TYPE_ANISOTROPIC;
-        ssdesc.Desc.MipFilter      = FILTER_TYPE_ANISOTROPIC;
-        ssdesc.Desc.AddressU       = TEXTURE_ADDRESS_WRAP;
-        ssdesc.Desc.AddressV       = TEXTURE_ADDRESS_WRAP;
-        ssdesc.Desc.AddressW       = TEXTURE_ADDRESS_WRAP;
-        ssdesc.Desc.MaxAnisotropy  = TEXTURE_ANISO;
+        ssdesc.SamplerOrTextureName = "Skybox";
+        ssdesc.Desc.MagFilter       = FILTER_TYPE_ANISOTROPIC;
+        ssdesc.Desc.MinFilter       = FILTER_TYPE_ANISOTROPIC;
+        ssdesc.Desc.MipFilter       = FILTER_TYPE_ANISOTROPIC;
+        ssdesc.Desc.AddressU        = TEXTURE_ADDRESS_WRAP;
+        ssdesc.Desc.AddressV        = TEXTURE_ADDRESS_WRAP;
+        ssdesc.Desc.AddressW        = TEXTURE_ADDRESS_WRAP;
+        ssdesc.Desc.MaxAnisotropy   = TEXTURE_ANISO;
         attribs.Desc.StaticSamplers = &ssdesc;
         attribs.Desc.NumStaticSamplers = 1;
         mDevice->CreateShader(attribs, &ps);
@@ -357,6 +364,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
         mDevice->CreatePipelineState(PSODesc, &mSkyboxPSO);
+        mSkyboxPSO->CreateShaderResourceBinding(&mSkyboxSRB, true);
     }
 
     // Create sampler
@@ -413,6 +421,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
             attribs.EntryPoint = "sprite_vs";
             attribs.FilePath = "sprite_vs.hlsl";
             attribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+            attribs.UseCombinedTextureSamplers = true;
             attribs.pShaderSourceStreamFactory = &BasicSSSFactory;
             mDevice->CreateShader(attribs, &sprite_vs);
         }
@@ -425,6 +434,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
             attribs.EntryPoint = "sprite_ps";
             attribs.FilePath = "sprite_ps.hlsl";
             attribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+            attribs.UseCombinedTextureSamplers = true;
             attribs.pShaderSourceStreamFactory = &BasicSSSFactory;
             mDevice->CreateShader(attribs, &sprite_ps);
         }
@@ -437,6 +447,7 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
             attribs.EntryPoint = "font_ps";
             attribs.FilePath = "font_ps.hlsl";
             attribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+            attribs.UseCombinedTextureSamplers = true;
             attribs.pShaderSourceStreamFactory = &BasicSSSFactory;
             mDevice->CreateShader(attribs, &font_ps);
             font_ps->GetShaderVariable("Tex")->Set(mFontTextureSRV);
@@ -446,11 +457,12 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
         PSODesc.GraphicsPipeline.pVS = sprite_vs;
         PSODesc.GraphicsPipeline.pPS = sprite_ps;
         mDevice->CreatePipelineState(PSODesc, &mSpritePSO);
-        mSpritePSO->CreateShaderResourceBinding(&mSpriteSRB);
+        mSpritePSO->CreateShaderResourceBinding(&mSpriteSRB, true);
 
         PSODesc.Name = "Font PSO";
         PSODesc.GraphicsPipeline.pPS = font_ps;
         mDevice->CreatePipelineState(PSODesc, &mFontPSO);
+        mFontPSO->CreateShaderResourceBinding(&mFontSRB, true);
     }
 
 
@@ -471,11 +483,14 @@ Asteroids::Asteroids(const Settings &settings, AsteroidsSimulation* asteroids, G
             mAsteroidsSRBs[srb]->GetVariable(SHADER_TYPE_PIXEL, "Tex")->Set(mTextureSRVs[srb]);
         }
     }
-   
+    mDeviceCtxt->TransitionResourceStates(static_cast<Uint32>(Barriers.size()), Barriers.data());
 }
 
 Asteroids::~Asteroids()
 {
+    mDeviceCtxt->Flush();
+    mDeviceCtxt->FinishFrame();
+
     mUpdateSubsetsSignal.Trigger(true, -1);
 
     for(auto &thread : mWorkerThreads)
@@ -498,6 +513,7 @@ void Asteroids::CreateMeshes()
 {
     auto asteroidMeshes = mAsteroids->Meshes();
 
+    std::vector<StateTransitionDesc> Barriers;
     // create vertex buffer
     {
         BufferDesc desc;
@@ -511,6 +527,7 @@ void Asteroids::CreateMeshes()
         data.DataSize = desc.uiSizeInBytes;
 
         mDevice->CreateBuffer(desc, data, &mVertexBuffer);
+        Barriers.emplace_back(mVertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, true);
     }
 
     // create index buffer
@@ -526,6 +543,7 @@ void Asteroids::CreateMeshes()
         data.DataSize = desc.uiSizeInBytes;
 
         mDevice->CreateBuffer(desc, data, &mIndexBuffer);
+        Barriers.emplace_back(mIndexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_INDEX_BUFFER, true);
     }
 
     std::vector<SkyboxVertex> skyboxVertices;
@@ -545,6 +563,7 @@ void Asteroids::CreateMeshes()
         data.DataSize = desc.uiSizeInBytes;
 
         mDevice->CreateBuffer(desc, data, &mSkyboxVertexBuffer);
+        Barriers.emplace_back(mSkyboxVertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, true);
     }
 
     // create sprite vertex buffer (dynamic)
@@ -557,7 +576,9 @@ void Asteroids::CreateMeshes()
         desc.CPUAccessFlags = CPU_ACCESS_WRITE;
         
         mDevice->CreateBuffer(desc, BufferData(), &mSpriteVertexBuffer);
+        Barriers.emplace_back(mSpriteVertexBuffer, RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_VERTEX_BUFFER, true);
     }
+    mDeviceCtxt->TransitionResourceStates(static_cast<Uint32>(Barriers.size()), Barriers.data());
 }
 
 void Asteroids::InitializeTextureData()
@@ -573,8 +594,9 @@ void Asteroids::InitializeTextureData()
     textureDesc.Usage            = USAGE_DEFAULT;
     textureDesc.BindFlags        = BIND_SHADER_RESOURCE;
 
+    std::vector<StateTransitionDesc> Barriers;
     for (UINT t = 0; t < NUM_UNIQUE_TEXTURES; ++t) {
-        std::vector<TextureSubResData> subResData(textureDesc.ArraySize*mAsteroids->GetTextureMipLevels());
+        std::vector<TextureSubResData> subResData(size_t{textureDesc.ArraySize} * size_t{mAsteroids->GetTextureMipLevels()});
         auto *texData = mAsteroids->TextureData(t);
         for(size_t subRes=0; subRes < subResData.size(); ++subRes)
         {
@@ -588,7 +610,9 @@ void Asteroids::InitializeTextureData()
         mDevice->CreateTexture(textureDesc, initData, &mTextures[t]);
         mTextureSRVs[t] = mTextures[t]->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
         mTextureSRVs[t]->SetSampler(mSamplerState);
+        Barriers.emplace_back(mTextures[t], RESOURCE_STATE_UNKNOWN, RESOURCE_STATE_SHADER_RESOURCE, true);
     }
+    mDeviceCtxt->TransitionResourceStates(static_cast<Uint32>(Barriers.size()), Barriers.data());
 }
 
 void Asteroids::CreateGUIResources()
@@ -674,7 +698,7 @@ void Asteroids::RenderSubset(Diligent::Uint32 SubsetNum,
                              Uint32 startIdx, 
                              Uint32 numAsteroids)
 {
-    pCtx->SetRenderTargets(0, nullptr, nullptr);
+    pCtx->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
     
     // Frame data
     auto staticAsteroidData = mAsteroids->StaticData();
@@ -685,8 +709,8 @@ void Asteroids::RenderSubset(Diligent::Uint32 SubsetNum,
     {
         IBuffer* ia_buffers[] = { mVertexBuffer };
         Uint32 ia_offsets[] = { 0 };
-        pCtx->SetVertexBuffers(0, 1, ia_buffers, ia_offsets, 0);
-        pCtx->SetIndexBuffer(mIndexBuffer, 0);
+        pCtx->SetVertexBuffers(0, 1, ia_buffers, ia_offsets, RESOURCE_STATE_TRANSITION_MODE_VERIFY, SET_VERTEX_BUFFERS_FLAG_NONE);
+        pCtx->SetIndexBuffer(mIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
     }
 
     auto pVar = m_BindingMode == BindingMode::Dynamic ? mAsteroidsSRBs[SubsetNum]->GetVariable(SHADER_TYPE_PIXEL, "Tex") : nullptr;
@@ -706,21 +730,18 @@ void Asteroids::RenderSubset(Diligent::Uint32 SubsetNum,
         if( m_BindingMode == BindingMode::Dynamic )
         {
             pVar->Set(mTextureSRVs[staticData->textureIndex]);
-            pCtx->CommitShaderResources(mAsteroidsSRBs[SubsetNum], COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+            pCtx->CommitShaderResources(mAsteroidsSRBs[SubsetNum], RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         }
         else if( m_BindingMode == BindingMode::Mutable )
         {
-            pCtx->CommitShaderResources(mAsteroidsSRBs[drawIdx], COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+            pCtx->CommitShaderResources(mAsteroidsSRBs[drawIdx], RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         }
         else if( m_BindingMode == BindingMode::TextureMutable )
         {
-            pCtx->CommitShaderResources(mAsteroidsSRBs[staticData->textureIndex], COMMIT_SHADER_RESOURCES_FLAG_VERIFY_STATES);
+            pCtx->CommitShaderResources(mAsteroidsSRBs[staticData->textureIndex], RESOURCE_STATE_TRANSITION_MODE_VERIFY);
         }
 
-        DrawAttribs attribs;
-        attribs.IsIndexed = true;
-        attribs.NumIndices = dynamicData->indexCount;
-        attribs.IndexType = VT_UINT16;
+        DrawAttribs attribs(dynamicData->indexCount, VT_UINT16, DRAW_FLAG_VERIFY_STATES);
         attribs.FirstIndexLocation = dynamicData->indexStart;
         attribs.BaseVertex = staticData->vertexStart;
         pCtx->Draw(attribs);
@@ -735,17 +756,9 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
     
     // Clear the render target
     float clearcol[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    mDeviceCtxt->SetRenderTargets(0, nullptr, nullptr);
-    mDeviceCtxt->ClearRenderTarget(nullptr, clearcol);
-    mDeviceCtxt->ClearDepthStencil(nullptr, CLEAR_DEPTH_FLAG, 0.0f, 0);
-
-    if( m_BindingMode == BindingMode::TextureMutable )
-    {
-        for(auto srb=mAsteroidsSRBs.begin(); srb!=mAsteroidsSRBs.end(); ++srb)
-        {
-            mDeviceCtxt->TransitionShaderResources(mAsteroidsPSO, *srb);
-        }
-    }
+    mDeviceCtxt->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    mDeviceCtxt->ClearRenderTarget(nullptr, clearcol, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+    mDeviceCtxt->ClearDepthStencil(nullptr, CLEAR_DEPTH_FLAG, 0.0f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     LONG64 currCounter;
     QueryPerformanceCounter((LARGE_INTEGER*)&currCounter);
@@ -812,7 +825,7 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
     QueryPerformanceCounter((LARGE_INTEGER*)&currCounter);
     mRenderTicks = currCounter-mRenderTicks;
 
-    mDeviceCtxt->SetRenderTargets(0, nullptr, nullptr);
+    mDeviceCtxt->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     // Draw skybox
     {
         {
@@ -822,13 +835,12 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
 
         IBuffer* ia_buffers[] = { mSkyboxVertexBuffer };
         UINT ia_offsets[] = { 0 };
-        mDeviceCtxt->SetVertexBuffers(0, 1, ia_buffers, ia_offsets, 0);
+        mDeviceCtxt->SetVertexBuffers(0, 1, ia_buffers, ia_offsets, RESOURCE_STATE_TRANSITION_MODE_VERIFY, SET_VERTEX_BUFFERS_FLAG_NONE);
 
         mDeviceCtxt->SetPipelineState(mSkyboxPSO);
-        mDeviceCtxt->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+        mDeviceCtxt->CommitShaderResources(mSkyboxSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-        DrawAttribs DrawAttrs;
-        DrawAttrs.NumVertices = 6*6;
+        DrawAttribs DrawAttrs(6*6, DRAW_FLAG_VERIFY_STATES);
         mDeviceCtxt->Draw(DrawAttrs);
     }
 
@@ -851,7 +863,7 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
 
         IBuffer* ia_buffers[] = { mSpriteVertexBuffer };
         Uint32 ia_offsets[] = { 0 };
-        mDeviceCtxt->SetVertexBuffers(0, 1, ia_buffers, ia_offsets, 0);
+        mDeviceCtxt->SetVertexBuffers(0, 1, ia_buffers, ia_offsets, RESOURCE_STATE_TRANSITION_MODE_VERIFY, SET_VERTEX_BUFFERS_FLAG_NONE);
 
         // Draw
         UINT vertexStart = 0;
@@ -860,15 +872,14 @@ void Asteroids::Render(float frameTime, const OrbitCamera& camera, const Setting
             if (control->Visible()) {
                 if (control->TextureFile().length() == 0) { // Font
                     mDeviceCtxt->SetPipelineState(mFontPSO);
-                    mDeviceCtxt->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+                    mDeviceCtxt->CommitShaderResources(mFontSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
                 } else { // Sprite
                     auto textureSRV = mSpriteTextures[control->TextureFile()];
                     mDeviceCtxt->SetPipelineState(mSpritePSO);
                     mSpriteSRB->GetVariable(SHADER_TYPE_PIXEL, "Tex")->Set(textureSRV);
-                    mDeviceCtxt->CommitShaderResources(mSpriteSRB, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+                    mDeviceCtxt->CommitShaderResources(mSpriteSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
                 }
-                DrawAttribs DrawAttrs;
-                DrawAttrs.NumVertices = controlVertices[1+i];
+                DrawAttribs DrawAttrs(controlVertices[1+i], DRAW_FLAG_VERIFY_STATES);
                 DrawAttrs.StartVertexLocation = vertexStart;
                 mDeviceCtxt->Draw(DrawAttrs);
             }

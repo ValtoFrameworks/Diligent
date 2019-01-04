@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ void TestCreateObjFromNativeResVK::CreateTexture(Diligent::ITexture *pTexture)
     RefCntAutoPtr<ITextureVk> pTextureVk(pTexture, IID_TextureVk);
     auto VkHandle = pTextureVk->GetVkImage();
     RefCntAutoPtr<ITexture> pAttachedTexture;
-    pDeviceVk->CreateTextureFromVulkanImage(VkHandle, SrcTexDesc, &pAttachedTexture);
+    pDeviceVk->CreateTextureFromVulkanImage(VkHandle, SrcTexDesc, RESOURCE_STATE_UNKNOWN, &pAttachedTexture);
     ++m_NumTexturesCreated;
     
     const auto& TestTexDesc = pAttachedTexture->GetDesc();
@@ -67,7 +67,7 @@ void TestCreateObjFromNativeResVK::CreateBuffer(Diligent::IBuffer *pBuffer)
     auto VkBufferHandle = pBufferVk->GetVkBuffer();
   
     RefCntAutoPtr<IBuffer> pBufferFromNativeVkHandle;
-    pDeviceVk->CreateBufferFromVulkanResource(VkBufferHandle, SrcBuffDesc, &pBufferFromNativeVkHandle);
+    pDeviceVk->CreateBufferFromVulkanResource(VkBufferHandle, SrcBuffDesc, RESOURCE_STATE_UNKNOWN, &pBufferFromNativeVkHandle);
     ++m_NumBuffersCreated;
     
     const auto &TestBufferDesc = pBufferFromNativeVkHandle->GetDesc();

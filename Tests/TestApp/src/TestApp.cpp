@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
 *  you may not use this file except in compliance with the License.
@@ -46,6 +46,10 @@
 #   include "RenderDeviceFactoryVk.h"
 #endif
 
+#if METAL_SUPPORTED
+#   include "RenderDeviceFactoryMtl.h"
+#endif
+
 #include "FileSystem.h"
 #include "MapHelper.h"
 #include "RenderScriptTest.h"
@@ -66,17 +70,72 @@
 #include "TestBrokenShader.h"
 #include "TestShaderResourceLayout.h"
 #include "TestShaderVarAccess.h"
+#include "TestSeparateTextureSampler.h"
+#include "StringTools.h"
 
 using namespace Diligent;
 
 TestApp::TestApp() :
     m_AppTitle("Test app")
 {
+    VERIFY_EXPR(PlatformMisc::GetMSB(Uint32{0}) == 32);
     for (Uint32 i = 0; i < 32; ++i)
     {
-        auto MSB = PlatformMisc::GetMSB((1 << i) | 1);
+        auto MSB = PlatformMisc::GetMSB((Uint32{1} << i) | 1);
         VERIFY_EXPR(MSB == i);
     }
+    
+    VERIFY_EXPR(PlatformMisc::GetMSB(Uint64{0}) == 64);
+    for (Uint32 i = 0; i < 64; ++i)
+    {
+        auto MSB = PlatformMisc::GetMSB((Uint64{1} << i) | 1);
+        VERIFY_EXPR(MSB == i);
+    }
+    
+    VERIFY_EXPR(PlatformMisc::GetLSB(Uint32{0}) == 32);
+    for (Uint32 i = 0; i < 32; ++i)
+    {
+        auto LSB = PlatformMisc::GetLSB((Uint32{1} << i) | (Uint32{1}<<31));
+        VERIFY_EXPR(LSB == i);
+    }
+
+    VERIFY_EXPR(PlatformMisc::GetLSB(Uint64{0}) == 64);
+    for (Uint32 i = 0; i < 64; ++i)
+    {
+        auto LSB = PlatformMisc::GetLSB((Uint64{1} << i) | (Uint64{1}<<63));
+        VERIFY_EXPR(LSB == i);
+    }
+
+    VERIFY_EXPR(PlatformMisc::CountOneBits(Uint32{0}) == 0);
+    VERIFY_EXPR(PlatformMisc::CountOneBits(Uint64{0}) == 0);
+    VERIFY_EXPR(PlatformMisc::CountOneBits(Uint32{1}) == 1);
+    VERIFY_EXPR(PlatformMisc::CountOneBits(Uint64{1}) == 1);
+    VERIFY_EXPR(PlatformMisc::CountOneBits(Uint32{7}) == 3);
+    VERIFY_EXPR(PlatformMisc::CountOneBits(Uint64{7}) == 3);
+    VERIFY_EXPR(PlatformMisc::CountOneBits( (Uint32{1}<<31) | (Uint32{1} << 15)) == 2);
+    VERIFY_EXPR(PlatformMisc::CountOneBits( (Uint64{1}<<63) | (Uint32{1} << 31)) == 2);
+    VERIFY_EXPR(PlatformMisc::CountOneBits( (Uint32{1}<<31) - 1) == 31);
+    VERIFY_EXPR(PlatformMisc::CountOneBits( (Uint64{1}<<63) - 1) == 63);
+
+
+    VERIFY_EXPR(StreqSuff("abc_def","abc", "_def"));
+    VERIFY_EXPR(!StreqSuff("abc","abc", "_def"));
+    VERIFY_EXPR(!StreqSuff("ab","abc", "_def"));
+    VERIFY_EXPR(!StreqSuff("abc_de","abc", "_def"));
+    VERIFY_EXPR(!StreqSuff("abc_def","ab", "_def"));
+    VERIFY_EXPR(!StreqSuff("abc_def","abd", "_def"));
+    VERIFY_EXPR(!StreqSuff("abc_def","abc", "_de"));
+    VERIFY_EXPR(!StreqSuff("abc","abc", "_def"));
+    VERIFY_EXPR(!StreqSuff("abc_def", "", "_def"));
+    VERIFY_EXPR(!StreqSuff("abc_def", "", ""));
+    
+    VERIFY_EXPR(StreqSuff("abc","abc", "_def", true));
+    VERIFY_EXPR(!StreqSuff("abc","abc_", "_def", true));
+    VERIFY_EXPR(!StreqSuff("abc_","abc", "_def", true));
+    VERIFY_EXPR(StreqSuff("abc","abc", nullptr, true));
+    VERIFY_EXPR(StreqSuff("abc","abc", nullptr, false));
+    VERIFY_EXPR(!StreqSuff("ab","abc", nullptr, true));
+    VERIFY_EXPR(!StreqSuff("abc","ab", nullptr, false));
 }
 
 TestApp::~TestApp()
@@ -160,6 +219,12 @@ void TestApp::InitializeDiligentEngine(
             }
 
             EngineD3D12Attribs EngD3D12Attribs;
+            EngD3D12Attribs.CPUDescriptorHeapAllocationSize[0] = 64; // D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
+            EngD3D12Attribs.CPUDescriptorHeapAllocationSize[1] = 32; // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
+            EngD3D12Attribs.CPUDescriptorHeapAllocationSize[2] = 16; // D3D12_DESCRIPTOR_HEAP_TYPE_RTV
+            EngD3D12Attribs.CPUDescriptorHeapAllocationSize[3] = 16; // D3D12_DESCRIPTOR_HEAP_TYPE_DSV
+            EngD3D12Attribs.DynamicDescriptorAllocationChunkSize[0] = 8; // D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
+            EngD3D12Attribs.DynamicDescriptorAllocationChunkSize[1] = 8; // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
             ppContexts.resize(1 + NumDeferredCtx);
             
             pFactoryD3D12->CreateDeviceAndContextsD3D12(EngD3D12Attribs, &m_pDevice, ppContexts.data(), NumDeferredCtx);
@@ -204,7 +269,7 @@ void TestApp::InitializeDiligentEngine(
 #if VULKAN_SUPPORTED
         case DeviceType::Vulkan:
         {
-#if ENGINE_DLL
+#if ENGINE_DLL && PLATFORM_WIN32
             GetEngineFactoryVkType GetEngineFactoryVk = nullptr;
             // Load the dll and import GetEngineFactoryVk() function
             LoadGraphicsEngineVk(GetEngineFactoryVk);
@@ -231,7 +296,7 @@ void TestApp::InitializeDiligentEngine(
             Features.imageCubeArray                 = true;
             Features.textureCompressionBC           = true;
             Features.vertexPipelineStoresAndAtomics = true;
-            Features.fragmentStoresAndAtomics       = true;            
+            Features.fragmentStoresAndAtomics       = true;
 
             ppContexts.resize(1 + NumDeferredCtx);
             auto *pFactoryVk = GetEngineFactoryVk();
@@ -242,6 +307,22 @@ void TestApp::InitializeDiligentEngine(
         }
         break;
 #endif
+
+#if METAL_SUPPORTED
+        case DeviceType::Metal:
+        {
+            EngineMtlAttribs MtlAttribs;
+
+            ppContexts.resize(1 + NumDeferredCtx);
+            auto *pFactoryMtl = GetEngineFactoryMtl();
+            pFactoryMtl->CreateDeviceAndContextsMtl(MtlAttribs, &m_pDevice, ppContexts.data(), NumDeferredCtx);
+
+            if (!m_pSwapChain && NativeWindowHandle != nullptr)
+                pFactoryMtl->CreateSwapChainMtl(m_pDevice, ppContexts[0], SCDesc, NativeWindowHandle, &m_pSwapChain);
+        }
+        break;
+#endif
+
         default:
             LOG_ERROR_AND_THROW("Unknown device type");
             break;
@@ -272,6 +353,9 @@ void TestApp::InitializeDiligentEngine(
 
 void TestApp::InitializeRenderers()
 {
+    m_pMTResCreationTest.reset(new MTResourceCreationTest(m_pDevice, m_pImmediateContext, 7));
+    
+    TestSeparateTextureSampler TestSeparateTexSampler{m_pDevice, m_pImmediateContext};
     TestRasterizerState TestRS{m_pDevice, m_pImmediateContext};
     TestBlendState TestBS{m_pDevice, m_pImmediateContext};
     TestDepthStencilState TestDSS{m_pDevice, m_pImmediateContext};
@@ -279,12 +363,11 @@ void TestApp::InitializeRenderers()
     TestTextureCreation TestTexCreation{m_pDevice, m_pImmediateContext};
     TestPSOCompatibility TestPSOCompat{m_pDevice};
     TestBrokenShader TestBrknShdr{m_pDevice};
-    
+        
     m_TestGS.Init(m_pDevice, m_pImmediateContext, m_pSwapChain);
     m_TestTessellation.Init(m_pDevice, m_pImmediateContext, m_pSwapChain);
     m_pTestShaderResArrays.reset(new TestShaderResArrays(m_pDevice, m_pImmediateContext, m_pSwapChain, 0.4f, -0.9f, 0.5f, 0.5f));
-    m_pMTResCreationTest.reset(new MTResourceCreationTest(m_pDevice, m_pImmediateContext, 7));
-    
+        
     TestShaderVarAccess TestShaderVarAccess{m_pDevice, m_pImmediateContext, m_pSwapChain};
     TestShaderResourceLayout TestShaderResLayout{m_pDevice, m_pImmediateContext};
     
@@ -379,7 +462,7 @@ void TestApp::InitializeRenderers()
         BuffDesc.uiSizeInBytes = sizeof(UniformData);
         BuffDesc.BindFlags = BIND_UNIFORM_BUFFER;
         BuffDesc.Usage = USAGE_DEFAULT;
-        BuffDesc.CPUAccessFlags = 0;
+        BuffDesc.CPUAccessFlags = CPU_ACCESS_NONE;
         Diligent::BufferData BuffData;
         BuffData.pData = UniformData;
         BuffData.DataSize = sizeof(UniformData);
@@ -393,7 +476,7 @@ void TestApp::InitializeRenderers()
         BuffDesc.uiSizeInBytes = sizeof(UniformData);
         BuffDesc.BindFlags = BIND_UNIFORM_BUFFER;
         BuffDesc.Usage = USAGE_DEFAULT;
-        BuffDesc.CPUAccessFlags = 0;
+        BuffDesc.CPUAccessFlags = CPU_ACCESS_NONE;
         Diligent::BufferData BuffData;
         BuffData.pData = UniformData;
         BuffData.DataSize = sizeof(UniformData);
@@ -459,20 +542,21 @@ void TestApp::InitializeRenderers()
             UniformData[3] = 0;
         }
 
-        m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr);
+        m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         float ClearColor[] = {0.1f, 0.2f, 0.4f, 1.0f};
-        m_pImmediateContext->ClearRenderTarget(nullptr, ClearColor);
-        Diligent::DrawAttribs DrawAttrs;
+        m_pImmediateContext->ClearRenderTarget(nullptr, ClearColor, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+        DrawAttribs DrawAttrs;
         DrawAttrs.NumVertices = 3;
+        DrawAttrs.Flags = DRAW_FLAG_VERIFY_STATES;
         m_pRenderScript->Run(m_pImmediateContext, "DrawTris", DrawAttrs);
         
         // This adds transition barrier for pTex1
-        m_pImmediateContext->SetRenderTargets(1, pRTVs, pDSV);
-        m_pImmediateContext->ClearRenderTarget(pRTVs[0], ClearColor);
-        m_pImmediateContext->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG);
+        m_pImmediateContext->SetRenderTargets(1, pRTVs, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        m_pImmediateContext->ClearRenderTarget(pRTVs[0], ClearColor, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+        m_pImmediateContext->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, 1, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
         // Generate draw command to the bound render target
         m_pImmediateContext->Draw(DrawAttrs);
-        m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr);
+        m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         // This will destroy texture and put D3D12 resource into release queue
         pTex.Release();
 
@@ -483,7 +567,7 @@ void TestApp::InitializeRenderers()
         BuffDesc.uiSizeInBytes = sizeof(Data);
         BuffDesc.BindFlags = BIND_UNIFORM_BUFFER;
         BuffDesc.Usage = USAGE_DEFAULT;
-        BuffDesc.CPUAccessFlags = 0;
+        BuffDesc.CPUAccessFlags = CPU_ACCESS_NONE;
         Diligent::BufferData BuffData;
         BuffData.pData = Data;
         BuffData.DataSize = sizeof(Data);
@@ -532,8 +616,15 @@ void TestApp::ProcessCommandLine(const char *CmdLine)
     }
     else
     {
-        LOG_INFO_MESSAGE("Device type is not specified. Using D3D11 device");
+#if D3D12_SUPPORTED
+        m_DeviceType = DeviceType::D3D12;
+#elif VULKAN_SUPPORTED
+        m_DeviceType = DeviceType::Vulkan;
+#elif D3D11_SUPPORTED
         m_DeviceType = DeviceType::D3D11;
+#elif GL_SUPPORTED || GLES_SUPPORTED
+        m_DeviceType = DeviceType::OpenGL;
+#endif
     }
 
     switch (m_DeviceType)
@@ -566,16 +657,16 @@ void TestApp::Update(double CurrTime, double ElapsedTime)
 
 void TestApp::Render()
 {
-    m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr);
+    m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     float ClearColor[] = {0.1f, 0.2f, 0.4f, 1.0f};
-    m_pImmediateContext->ClearRenderTarget(nullptr, ClearColor);
-    m_pImmediateContext->ClearDepthStencil(nullptr, CLEAR_DEPTH_FLAG, 1.f);
-
+    m_pImmediateContext->ClearRenderTarget(nullptr, ClearColor, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+    m_pImmediateContext->ClearDepthStencil(nullptr, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
+    
     double dCurrTime = m_CurrTime;
     
     float instance_offsets[] = { -0.3f, (float)sin(dCurrTime + 0.5)*0.1f, 0.0f, (float)sin(dCurrTime)*0.1f, +0.3f, -0.3f + (float)cos(dCurrTime)*0.1f };
-    m_pInstBuff2->UpdateData(m_pImmediateContext, sizeof(float) * 1, sizeof(float) * 5, &instance_offsets[1]);
-    m_pInstBuff->CopyData(m_pImmediateContext, m_pInstBuff2, sizeof(float) * 2, sizeof(float) * 2, sizeof(float) * 4);
+    m_pImmediateContext->UpdateBuffer(m_pInstBuff2, sizeof(float) * 1, sizeof(float) * 5, &instance_offsets[1], RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    m_pImmediateContext->CopyBuffer(m_pInstBuff2, sizeof(float) * 2, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, m_pInstBuff, sizeof(float) * 2, sizeof(float) * 4, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
     {
         MapHelper<float> UniformData(m_pImmediateContext, m_pUniformBuff, MAP_WRITE, MAP_FLAG_DISCARD);
@@ -590,14 +681,16 @@ void TestApp::Render()
         UniformData[3] = 0;
     }
 
-    Diligent::DrawAttribs DrawAttrs;
+    DrawAttribs DrawAttrs;
     DrawAttrs.NumVertices = 3;
+    DrawAttrs.Flags = DRAW_FLAG_VERIFY_STATES;
     m_pRenderScript->Run(m_pImmediateContext, "DrawTris", DrawAttrs);
 
     DrawAttrs.IsIndexed = true;
     DrawAttrs.NumIndices = 3;
     DrawAttrs.IndexType = VT_UINT32;
     DrawAttrs.NumInstances = 3;
+    DrawAttrs.Flags = DRAW_FLAG_VERIFY_STATES;
     m_pRenderScript->Run(m_pImmediateContext, "DrawTris", DrawAttrs);
     m_pTestDrawCommands->Draw();
     m_pTestBufferAccess->Draw((float)dCurrTime);

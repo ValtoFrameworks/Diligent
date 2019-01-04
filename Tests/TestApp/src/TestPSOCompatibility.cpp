@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -203,6 +203,7 @@ RefCntAutoPtr<IPipelineState> TestPSOCompatibility::CreateTestPSO(const char *VS
 
     ShaderCreationAttribs CreationAttrs;
     CreationAttrs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+    CreationAttrs.UseCombinedTextureSamplers = true;
     RefCntAutoPtr<IShader> pVS;
     {
         CreationAttrs.Desc.ShaderType = SHADER_TYPE_VERTEX;
@@ -236,6 +237,7 @@ RefCntAutoPtr<IPipelineState> TestPSOCompatibility::CreateTestPSO(const char *CS
     PSODesc.IsComputePipeline = true;
     ShaderCreationAttribs CreationAttrs;
     CreationAttrs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+    CreationAttrs.UseCombinedTextureSamplers = true;
     RefCntAutoPtr<IShader> pCS;
     {
         CreationAttrs.Desc.ShaderType = SHADER_TYPE_COMPUTE;

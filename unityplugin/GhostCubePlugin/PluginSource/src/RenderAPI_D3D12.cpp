@@ -1,4 +1,5 @@
 #include <vector>
+#include <array>
 
 #include "PlatformBase.h"
 
@@ -42,13 +43,13 @@ public:
     IMPLEMENT_QUERY_INTERFACE_IN_PLACE( IID_CommandQueueD3D12, TBase )
 
 	// Returns the fence value that will be signaled next time
-    virtual UINT64 GetNextFenceValue()override final
+    virtual Uint64 GetNextFenceValue()override final
     {
         return m_pUnityGraphicsD3D12->GetNextFrameFenceValue();
     }
 
 	// Executes a given command list
-    virtual UINT64 ExecuteCommandList(ID3D12GraphicsCommandList* commandList)override final
+    virtual Uint64 Submit(ID3D12GraphicsCommandList* commandList)override final
     {
         auto NextFenceValue = m_pUnityGraphicsD3D12->GetNextFrameFenceValue();
         m_CurrentFenceValue = m_pUnityGraphicsD3D12->ExecuteCommandList(commandList, static_cast<int>(m_ResourcesToTransition.size()), m_ResourcesToTransition.empty() ? nullptr : m_ResourcesToTransition.data());
@@ -70,7 +71,7 @@ public:
     }
 
     // Blocks execution until all pending GPU commands are complete
-    virtual void IdleGPU()
+    virtual Uint64 WaitForIdle()
     {
         if (m_CurrentFenceValue < GetCompletedFenceValue())
         {
@@ -79,6 +80,7 @@ public:
             WaitForSingleObject(m_WaitForGPUEventHandle, INFINITE);
             VERIFY(GetCompletedFenceValue() >= m_CurrentFenceValue, "Unexpected signaled fence value");
         }
+        return GetCompletedFenceValue();
     }
 
     void TransitionResource(const UnityGraphicsD3D12ResourceState &ResourceState)
@@ -143,7 +145,8 @@ void RenderAPI_D3D12::ProcessDeviceEvent(UnityGfxDeviceEventType type, IUnityInt
             m_CmdQueue = NEW_RC_OBJ(DefaultAllocator, "UnityCommandQueueImpl instance", UnityCommandQueueImpl)(m_UnityGraphicsD3D12);
             auto *pFactoryD3D12 = GetEngineFactoryD3D12();
             EngineD3D12Attribs Attribs;
-            pFactoryD3D12->AttachToD3D12Device(d3d12Device, m_CmdQueue, Attribs, &m_Device, &m_Context, 0);
+            std::array<ICommandQueueD3D12*, 1> CmdQueues = {m_CmdQueue};
+            pFactoryD3D12->AttachToD3D12Device(d3d12Device, CmdQueues.size(), CmdQueues.data(), Attribs, &m_Device, &m_Context, 0);
             m_Device->QueryInterface(IID_RenderDeviceD3D12, reinterpret_cast<IObject**>(static_cast<IRenderDeviceD3D12**>(&m_RenderDeviceD3D12)));
         }
         break;
@@ -163,14 +166,15 @@ void RenderAPI_D3D12::BeginRendering()
     m_RenderTarget->SetD3D12ResourceState(D3D12_RESOURCE_STATE_RENDER_TARGET);
     m_DepthBuffer->SetD3D12ResourceState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
     ITextureView *RTVs[] = { m_RTV };
-    m_Context->SetRenderTargets(1, RTVs, m_DSV);
+    m_Context->SetRenderTargets(1, RTVs, m_DSV, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
 }
 
 void RenderAPI_D3D12::EndRendering()
 {
     m_Context->Flush();
+    m_Context->FinishFrame();
     m_Context->InvalidateState();
-    m_RenderDeviceD3D12->FinishFrame();
+    m_RenderDeviceD3D12->ReleaseStaleResources();
 }
 
 void RenderAPI_D3D12::AttachToNativeRenderTexture(void *nativeRenderTargetHandle, void *nativeDepthTextureHandle)
@@ -185,14 +189,14 @@ void RenderAPI_D3D12::AttachToNativeRenderTexture(void *nativeRenderTargetHandle
         {
             auto *pd3d12RenderTarget = reinterpret_cast<ID3D12Resource*>(nativeRenderTargetHandle);
             RefCntAutoPtr<ITexture> pRenderTarget;
-            pDeviceD3D12->CreateTextureFromD3DResource(pd3d12RenderTarget, &pRenderTarget);
+            pDeviceD3D12->CreateTextureFromD3DResource(pd3d12RenderTarget, RESOURCE_STATE_UNDEFINED, &pRenderTarget);
             pRenderTarget->QueryInterface(IID_TextureD3D12, reinterpret_cast<IObject**>(static_cast<ITextureD3D12**>(&m_RenderTarget)));
         }
 
         {
             auto *pd3d12DepthBuffer = reinterpret_cast<ID3D12Resource *>(nativeDepthTextureHandle);
             RefCntAutoPtr<ITexture> pDepthBuffer;
-            pDeviceD3D12->CreateTextureFromD3DResource(pd3d12DepthBuffer, &pDepthBuffer);
+            pDeviceD3D12->CreateTextureFromD3DResource(pd3d12DepthBuffer, RESOURCE_STATE_UNDEFINED, &pDepthBuffer);
             pDepthBuffer->QueryInterface(IID_TextureD3D12, reinterpret_cast<IObject**>(static_cast<ITextureD3D12**>(&m_DepthBuffer)));
         }
         CreateTextureViews(m_RenderTarget, m_DepthBuffer);

@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -44,6 +44,7 @@ ShaderConverterTest::ShaderConverterTest( IRenderDevice *pRenderDevice, IDeviceC
     CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
     CreationAttrs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
     CreationAttrs.Desc.Name = "Test converted shader";
+    CreationAttrs.UseCombinedTextureSamplers = pRenderDevice->GetDeviceCaps().IsGLDevice();
     RefCntAutoPtr<IHLSL2GLSLConversionStream> pStream;
     CreationAttrs.ppConversionStream = pStream.GetRawDblPtr();
 

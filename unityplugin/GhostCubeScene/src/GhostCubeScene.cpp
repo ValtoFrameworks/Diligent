@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ void GhostCubeScene::OnGraphicsInitialized()
 
         PipelineStateDesc PSODesc;
         PSODesc.IsComputePipeline = false;
-        PSODesc.Name = "Render sample cube PSO";
+        PSODesc.Name = "Mirror PSO";
         PSODesc.GraphicsPipeline.NumRenderTargets = 1;
 
         PSODesc.GraphicsPipeline.RTVFormats[0] = SCDesc.ColorBufferFormat == TEX_FORMAT_RGBA8_UNORM ? TEX_FORMAT_RGBA8_UNORM_SRGB : SCDesc.ColorBufferFormat;
@@ -98,6 +98,7 @@ void GhostCubeScene::OnGraphicsInitialized()
         CreationAttribs.pShaderSourceStreamFactory = &BasicSSSFactory;
         CreationAttribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
         CreationAttribs.Desc.DefaultVariableType = SHADER_VARIABLE_TYPE_STATIC;
+        CreationAttribs.UseCombinedTextureSamplers = true;
 
         CreateUniformBuffer(pDevice, sizeof(float4x4), "Mirror VS constants CB", &m_pMirrorVSConstants);
 
@@ -131,6 +132,7 @@ void GhostCubeScene::OnGraphicsInitialized()
         PSODesc.GraphicsPipeline.pVS = pVS;
         PSODesc.GraphicsPipeline.pPS = pPS;
         pDevice->CreatePipelineState(PSODesc, &m_pMirrorPSO);
+        m_pMirrorPSO->CreateShaderResourceBinding(&m_pMirrorSRB, true);
     }
 #if D3D12_SUPPORTED
     m_pStateTransitionHandler.reset(new GhostCubeSceneResTrsnHelper(*this));
@@ -154,10 +156,10 @@ void GhostCubeScene::Render(UnityRenderingEvent RenderEventFunc)
     // In OpenGL, render targets must be bound to the pipeline to be cleared
     ITextureView *pRTVs[] = { m_pRenderTarget->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET) };
     ITextureView *pDSV = m_pDepthBuffer->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
-    pCtx->SetRenderTargets(1, pRTVs, pDSV);
+    pCtx->SetRenderTargets(1, pRTVs, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     const float ClearColor[] = { 0.f, 0.2f, 0.5f, 1.0f };
-    pCtx->ClearRenderTarget(pRTVs[0], ClearColor);
-    pCtx->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, ReverseZ ? 0.f : 1.f, 0);
+    pCtx->ClearRenderTarget(pRTVs[0], ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    pCtx->ClearDepthStencil(pDSV, CLEAR_DEPTH_FLAG, ReverseZ ? 0.f : 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     if (DeviceCaps.DevType == DeviceType::D3D12)
     {
@@ -188,12 +190,12 @@ void GhostCubeScene::Render(UnityRenderingEvent RenderEventFunc)
         // Call the plugin
         RenderEventFunc(0);
     }
-
+    
     // We need to invalidate the context state since the plugin has used d3d11 context
     pCtx->InvalidateState();
-    pCtx->SetRenderTargets(0, nullptr, nullptr);
+    pCtx->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     pCtx->SetPipelineState(m_pMirrorPSO);
-    pCtx->CommitShaderResources(nullptr, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    pCtx->CommitShaderResources(m_pMirrorSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     {
         float4x4 MirrorWorldView = scaleMatrix(5,5,5) * rotationX(PI_F*0.6f) * translationMatrix(0.f, -3.0f, 10.0f);
@@ -208,7 +210,6 @@ void GhostCubeScene::Render(UnityRenderingEvent RenderEventFunc)
         *CBConstants = transposeMatrix(wvp);
     }
 
-    DrawAttribs DrawAttrs;
-    DrawAttrs.NumVertices = 4;
+    DrawAttribs DrawAttrs(4, DRAW_FLAG_VERIFY_STATES);
     pCtx->Draw(DrawAttrs);
 }

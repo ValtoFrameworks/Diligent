@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -42,9 +42,11 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
     BasicShaderSourceStreamFactory BasicSSSFactory;
     CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
     CreationAttrs.Desc.TargetProfile = SHADER_PROFILE_DX_5_0;
+    CreationAttrs.UseCombinedTextureSamplers = true;
 
     RefCntAutoPtr<Diligent::IShader> pVS, pPS;
     {
+        CreationAttrs.Desc.Name = "TestShaderResArrays: VS";
         CreationAttrs.FilePath = "Shaders\\ShaderResArrayTest.vsh";
         CreationAttrs.Desc.ShaderType =  SHADER_TYPE_VERTEX;
         CreationAttrs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
@@ -52,13 +54,14 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
     }
 
     {
+        CreationAttrs.Desc.Name = "TestShaderResArrays: PS";
         CreationAttrs.FilePath = "Shaders\\ShaderResArrayTest.psh";
         
         StaticSamplerDesc StaticSampler;
         StaticSampler.Desc.MinFilter = FILTER_TYPE_LINEAR;
         StaticSampler.Desc.MagFilter = FILTER_TYPE_LINEAR;
         StaticSampler.Desc.MipFilter = FILTER_TYPE_LINEAR;
-        StaticSampler.TextureName = "g_tex2DTest";
+        StaticSampler.SamplerOrTextureName = "g_tex2DTest";
         CreationAttrs.Desc.NumStaticSamplers = 1;
         CreationAttrs.Desc.StaticSamplers = &StaticSampler;
         CreationAttrs.Desc.ShaderType =  SHADER_TYPE_PIXEL;
@@ -165,10 +168,11 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
 
     //pVS->BindResources(m_pResourceMapping, 0);
     IDeviceObject *ppSRVs[] = {m_pTextures[3]->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE)};
-    pPS->BindResources(pResMapping, BIND_SHADER_RESOURCES_RESET_BINDINGS | BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED);
+    pPS->BindResources(pResMapping, BIND_SHADER_RESOURCES_KEEP_EXISTING);
     pPS->GetShaderVariable("g_tex2DTest2")->SetArray( ppSRVs, 1, 1);
 
-    m_pSRB->BindResources(SHADER_TYPE_PIXEL, pResMapping, BIND_SHADER_RESOURCES_RESET_BINDINGS | BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED);
+    m_pSRB->InitializeStaticResources();
+    m_pSRB->BindResources(SHADER_TYPE_PIXEL, pResMapping, BIND_SHADER_RESOURCES_KEEP_EXISTING | BIND_SHADER_RESOURCES_UPDATE_MUTABLE | BIND_SHADER_RESOURCES_UPDATE_DYNAMIC);
     ppSRVs[0] = m_pTextures[4]->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
     m_pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_tex2DTest")->SetArray(ppSRVs, 3, 1);
 }
@@ -179,14 +183,14 @@ void TestShaderResArrays::Draw()
     IDeviceObject *ppSRVs[] = {m_pTextures[7]->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE)};
     m_pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_tex2D")->SetArray(ppSRVs, 1, 1);
 
-    m_pDeviceContext->CommitShaderResources(m_pSRB, COMMIT_SHADER_RESOURCES_FLAG_TRANSITION_RESOURCES);
+    m_pDeviceContext->CommitShaderResources(m_pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
     IBuffer *pBuffs[] = {m_pVertexBuff};
     Uint32 Offsets[] = {0};
-    m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Offsets, SET_VERTEX_BUFFERS_FLAG_RESET );
+    m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Offsets, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET );
 
-    Diligent::DrawAttribs DrawAttrs;
-    DrawAttrs.NumVertices = 4; // Draw quad
+    // Draw a quad
+    Diligent::DrawAttribs DrawAttrs(4, DRAW_FLAG_VERIFY_STATES);
     m_pDeviceContext->Draw( DrawAttrs );
     
     SetStatus(TestResult::Succeeded);

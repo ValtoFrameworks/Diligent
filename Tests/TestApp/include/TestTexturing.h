@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ private:
     Diligent::RefCntAutoPtr<Diligent::IDeviceContext> m_pDeviceContext;
 
     Diligent::RefCntAutoPtr<Diligent::IPipelineState> m_pPSO;
+    Diligent::RefCntAutoPtr<Diligent::IShaderResourceBinding> m_pSRB;
     Diligent::RefCntAutoPtr<Diligent::IBuffer> m_pVertexBuff;
     Diligent::RefCntAutoPtr<Diligent::ISampler> m_pSampler;
     Diligent::RefCntAutoPtr<Diligent::ITexture> m_pTexture;

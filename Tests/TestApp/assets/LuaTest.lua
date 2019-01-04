@@ -167,6 +167,7 @@ end
 
 TestVS = Shader.Create{
 	FilePath =  GetShaderPath("minimalInst", "vsh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {
 		ShaderType = "SHADER_TYPE_VERTEX",
 		Name = "TestVS"
@@ -177,6 +178,7 @@ assert(TestVS.Desc.Name == "TestVS")
 
 TestPS = Shader.Create{
 	FilePath =  GetShaderPath("minimal", "psh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {
 		ShaderType = "SHADER_TYPE_PIXEL",
 		Name = "TestPS",
@@ -187,6 +189,7 @@ assert(TestPS.Desc.Name == "TestPS")
 
 TestPS2 = Shader.Create{
 	FilePath =  GetShaderPath("minimal", "psh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {
 		ShaderType = TestPS.Desc.ShaderType,
 		Name = TestPS.Desc.Name .. "2"
@@ -197,6 +200,7 @@ assert(TestPS2.Desc.Name == "TestPS2")
 
 UniformBuffPS = Shader.Create{
 	FilePath =  GetShaderPath("UniformBuffer", "psh"),
+    UseCombinedTextureSamplers = true,
 	Desc = {
 		ShaderType = "SHADER_TYPE_PIXEL",
 		Name = "Unifrom buffer PS"
@@ -373,7 +377,7 @@ TestBuffer = Buffer.Create(
 		BindFlags = {"BIND_VERTEX_BUFFER", "BIND_SHADER_RESOURCE"},
 		uiSizeInBytes = 64,
 		Mode = "BUFFER_MODE_FORMATTED",
-		Format = {ValueType = "VT_FLOAT32", NumComponents = 1, IsNormalized = false},
+        ElementByteStride = 4
 	},
 	"VT_FLOAT32",
 	{1,2,3,4,5,6,7,8, 9,10,11,12,13,14,15,16}
@@ -383,9 +387,21 @@ assert(TestBuffer.Usage == "USAGE_DEFAULT")
 assert(TestBuffer.BindFlags[1] == "BIND_VERTEX_BUFFER" and TestBuffer.BindFlags[2] == "BIND_SHADER_RESOURCE" or
 	   TestBuffer.BindFlags[2] == "BIND_VERTEX_BUFFER" and TestBuffer.BindFlags[1] == "BIND_SHADER_RESOURCE")
 assert(TestBuffer.Mode == "BUFFER_MODE_FORMATTED")
-assert(TestBuffer.Format.ValueType == "VT_FLOAT32" )
-assert(TestBuffer.Format.NumComponents == 1 )
-assert(TestBuffer.Format.IsNormalized == false )
+
+TestBufferSRV = TestBuffer:CreateView{
+	Name = "TestBuffer SRV",
+	ViewType = "BUFFER_VIEW_SHADER_RESOURCE",
+	ByteOffset = 16,
+	ByteWidth = 32,
+    Format = {ValueType = "VT_FLOAT32", NumComponents = 1, IsNormalized = false}
+}
+
+assert(TestBufferSRV.ViewType == "BUFFER_VIEW_SHADER_RESOURCE" )
+assert(TestBufferSRV.ByteOffset == 16)
+assert(TestBufferSRV.ByteWidth == 32)
+assert(TestBufferSRV.Format.ValueType == "VT_FLOAT32" )
+assert(TestBufferSRV.Format.NumComponents == 1 )
+assert(TestBufferSRV.Format.IsNormalized == false )
 
 
 function TestBufferArg (Buffer)
@@ -416,42 +432,42 @@ TestBuffer3 = Buffer.Create(
 		BindFlags = {"BIND_VERTEX_BUFFER", "BIND_SHADER_RESOURCE"},
 		uiSizeInBytes = 64,
 		Mode = "BUFFER_MODE_FORMATTED",
-		Format = {ValueType = "VT_FLOAT32", NumComponents = 1, IsNormalized = false},
+        ElementByteStride = 4
 	}
 )
 
-Context.SetVertexBuffers(1, TestBuffer, 0, TestBuffer3, 16, "SET_VERTEX_BUFFERS_FLAG_RESET")
+Context.SetVertexBuffers(1, TestBuffer, 0, TestBuffer3, 16, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION", "SET_VERTEX_BUFFERS_FLAG_RESET")
 Context.SetVertexBuffers(1, TestBuffer, 0, nil)
-Context.SetVertexBuffers(nil, nil, nil, {"SET_VERTEX_BUFFERS_FLAG_RESET", "SET_VERTEX_BUFFERS_FLAG_RESET"})
+Context.SetVertexBuffers(nil, nil, nil, "RESOURCE_STATE_TRANSITION_MODE_NONE", {"SET_VERTEX_BUFFERS_FLAG_RESET", "SET_VERTEX_BUFFERS_FLAG_RESET"})
 
 TestBuffer3 = Buffer.Create({
-	BindFlags = {"BIND_VERTEX_BUFFER", "BIND_UNORDERED_ACCESS"},
-	Mode = "BUFFER_MODE_FORMATTED",
-	Format = {ValueType = "VT_FLOAT32", NumComponents = 4, IsNormalized = false},
+    Name = "Test Buffer 3",
+	BindFlags = {"BIND_VERTEX_BUFFER", "BIND_UNORDERED_ACCESS", "BIND_SHADER_RESOURCE"},
+	Mode = "BUFFER_MODE_RAW",
 	uiSizeInBytes = (4+4) * 4 * 4,
 	ElementByteStride = 4 * 4
 })
-assert( TestBuffer3.Mode == "BUFFER_MODE_FORMATTED" )
-assert( TestBuffer3.Format.ValueType == "VT_FLOAT32" )
-assert( TestBuffer3.Format.NumComponents == 4 )
-assert( TestBuffer3.Format.IsNormalized == false )
+assert( TestBuffer3.Mode == "BUFFER_MODE_RAW" )
 
-Buff3DefaultUAV = TestBuffer3:GetDefaultView("BUFFER_VIEW_UNORDERED_ACCESS")
-assert(Buff3DefaultUAV.ViewType == "BUFFER_VIEW_UNORDERED_ACCESS" )
-assert(Buff3DefaultUAV.ByteOffset == 0 )
-assert(Buff3DefaultUAV.ByteWidth == TestBuffer3.uiSizeInBytes )
+TestBuffer3SRV = TestBuffer3:CreateView{
+	Name = "TestBuffer3 SRV",
+	ViewType = "BUFFER_VIEW_SHADER_RESOURCE",
+	ByteOffset = 16,
+	ByteWidth = 32
+}
+assert(TestBuffer3SRV.ViewType == "BUFFER_VIEW_SHADER_RESOURCE" )
+assert(TestBuffer3SRV.ByteOffset == 16)
+assert(TestBuffer3SRV.ByteWidth == 32)
 
 Buff3UAV = TestBuffer3:CreateView{
-	Name = "Buff3UAV",
+	Name = "TestBuffer3 UAV",
 	ViewType = "BUFFER_VIEW_UNORDERED_ACCESS",
-	ByteOffset = 0,
-	ByteWidth = TestBuffer3.ElementByteStride * 2
+	ByteOffset = 16
 }
+assert(Buff3UAV.ViewType == "BUFFER_VIEW_UNORDERED_ACCESS" )
+assert(Buff3UAV.ByteOffset == 16 )
+assert(Buff3UAV.ByteWidth == TestBuffer3.uiSizeInBytes - Buff3UAV.ByteOffset)
 
-assert(Buff3UAV.Name == "Buff3UAV")
-assert(Buff3UAV.ViewType == "BUFFER_VIEW_UNORDERED_ACCESS")
-assert(Buff3UAV.ByteOffset == 0)
-assert(Buff3UAV.ByteWidth == TestBuffer3.ElementByteStride * 2)
 
 function TestBufferViewArg(BuffViewArg)
 	assert( BuffViewArg.Name == "TestGlobalBuff2UAV" )
@@ -466,7 +482,7 @@ IndexBuffer = Buffer.Create(
 	"VT_UINT32",
 	{0,1,2}
 )
-Context.SetIndexBuffer(IndexBuffer, 4)
+Context.SetIndexBuffer(IndexBuffer, 4, "RESOURCE_STATE_TRANSITION_MODE_TRANSITION")
 
 TestTexture = Texture.Create{
 	Name = "Test Texture 2D",
@@ -599,18 +615,18 @@ TestDrawAttribs = DrawAttribs.Create{
 	IndexType = "VT_UINT16",
 	IsIndexed = true,
 	NumInstances = 32,
-	IsIndirect = true,
 	BaseVertex = 48,
 	IndirectDrawArgsOffset = 1024,
 	StartVertexLocation = 64,
 	FirstInstanceLocation = 96,
-	pIndirectDrawAttribs = TestBuffer2
+	pIndirectDrawAttribs = TestBuffer2,
+    IndirectAttribsBufferStateTransitionMode = "RESOURCE_STATE_TRANSITION_MODE_NONE",
+    Flags = {"DRAW_FLAG_VERIFY_STATES"}
 }
 assert( TestDrawAttribs.NumIndices == 128 )
 assert( TestDrawAttribs.IndexType == "VT_UINT16" )
 assert( TestDrawAttribs.IsIndexed == true )
 assert( TestDrawAttribs.NumInstances == 32 )
-assert( TestDrawAttribs.IsIndirect == true )
 assert( TestDrawAttribs.BaseVertex == 48 )
 assert( TestDrawAttribs.IndirectDrawArgsOffset == 1024 )
 assert( TestDrawAttribs.StartVertexLocation == 64 )
@@ -622,12 +638,12 @@ TestDrawAttribs.NumVertices = 92
 TestDrawAttribs.IndexType = "VT_UINT32"
 TestDrawAttribs.IsIndexed = false
 TestDrawAttribs.NumInstances = 19
-TestDrawAttribs.IsIndirect = false
 TestDrawAttribs.BaseVertex = 498
 TestDrawAttribs.IndirectDrawArgsOffset = 234
 TestDrawAttribs.FirstIndexLocation = 264
 TestDrawAttribs.FirstInstanceLocation = 946
 TestDrawAttribs.pIndirectDrawAttribs = TestGlobalBuffer
+TestDrawAttribs.IndirectAttribsBufferStateTransitionMode = "RESOURCE_STATE_TRANSITION_MODE_TRANSITION"
 
 TestDrawAttribs2 = DrawAttribs.Create{
 	pIndirectDrawAttribs = TestDrawAttribs.pIndirectDrawAttribs
@@ -639,12 +655,12 @@ assert( TestDrawAttribs.NumVertices == 92 )
 assert( TestDrawAttribs.IndexType == "VT_UINT32" )
 assert( TestDrawAttribs.IsIndexed == false )
 assert( TestDrawAttribs.NumInstances == 19 )
-assert( TestDrawAttribs.IsIndirect == false )
 assert( TestDrawAttribs.BaseVertex == 498 )
 assert( TestDrawAttribs.IndirectDrawArgsOffset == 234 )
 assert( TestDrawAttribs.FirstIndexLocation == 264 )
 assert( TestDrawAttribs.StartVertexLocation == 264 )
 assert( TestDrawAttribs.FirstInstanceLocation == 946 )
+assert( TestDrawAttribs.IndirectAttribsBufferStateTransitionMode == "RESOURCE_STATE_TRANSITION_MODE_TRANSITION" )
 
 
 
@@ -653,7 +669,6 @@ assert( TestGlobalDrawAttribs.NumIndices == 123 );
 assert( TestGlobalDrawAttribs.IndexType == "VT_UINT16" );
 assert( TestGlobalDrawAttribs.IsIndexed == true );
 assert( TestGlobalDrawAttribs.NumInstances == 19 );
-assert( TestGlobalDrawAttribs.IsIndirect == true );
 assert( TestGlobalDrawAttribs.BaseVertex == 97 );
 assert( TestGlobalDrawAttribs.IndirectDrawArgsOffset == 120 );
 assert( TestGlobalDrawAttribs.StartVertexLocation == 98 );
@@ -665,7 +680,6 @@ function TestDrawAttribsArg(DrawAttrs)
 	assert( DrawAttrs.IndexType == "VT_UINT16" );
 	assert( DrawAttrs.IsIndexed == true );
 	assert( DrawAttrs.NumInstances == 139 );
-	assert( DrawAttrs.IsIndirect == true );
 	assert( DrawAttrs.BaseVertex == 937 );
 	assert( DrawAttrs.IndirectDrawArgsOffset == 1205 );
 	assert( DrawAttrs.StartVertexLocation == 198 );
