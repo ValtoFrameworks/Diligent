@@ -27,7 +27,15 @@
 #include "pch.h"
 #include "TestSeparateTextureSampler.h"
 
-static const char g_ShaderSource[] = 
+static const char g_VSShaderSource[] = 
+R"(
+void VSMain(out float4 pos : SV_POSITION)
+{
+	pos = float4(0.0, 0.0, 0.0, 0.0);
+}
+)";
+
+static const char g_PSShaderSource[] = 
 R"(
 
 Texture2D g_Tex;
@@ -36,11 +44,6 @@ Texture2D g_Tex2;
 SamplerState g_Sam2;
 SamplerState g_Sam3[2];
 SamplerState g_Sam4[2];
-
-void VSMain(out float4 pos : SV_POSITION)
-{
-	pos = float4(0.0, 0.0, 0.0, 0.0);
-}
 
 void PSMain(out float4 col : SV_TARGET)
 {
@@ -58,10 +61,10 @@ using namespace Diligent;
 TestSeparateTextureSampler::TestSeparateTextureSampler(IRenderDevice *pDevice, IDeviceContext *pContext) : 
     UnitTestBase("Test separate texture sampler")
 {
-    if (pDevice->GetDeviceCaps().IsD3DDevice() /*|| pDevice->GetDeviceCaps().IsVulkanDevice()*/)
+    if (pDevice->GetDeviceCaps().IsD3DDevice() || pDevice->GetDeviceCaps().IsVulkanDevice())
     {
-        ShaderCreationAttribs Attrs;
-        Attrs.Source = g_ShaderSource;
+        ShaderCreateInfo Attrs;
+        Attrs.Source = g_VSShaderSource;
         Attrs.EntryPoint = "VSMain";
         Attrs.Desc.ShaderType = SHADER_TYPE_VERTEX;
         Attrs.Desc.Name = "VSMain (TestSeparateTextureSampler)";
@@ -69,26 +72,10 @@ TestSeparateTextureSampler::TestSeparateTextureSampler(IRenderDevice *pDevice, I
         RefCntAutoPtr<IShader> pVS;
         pDevice->CreateShader(Attrs, &pVS);
 
+        Attrs.Source = g_PSShaderSource;
         Attrs.EntryPoint = "PSMain";
         Attrs.Desc.ShaderType = SHADER_TYPE_PIXEL;
         Attrs.Desc.Name = "PSMain (TestSeparateTextureSampler)";
-        ShaderVariableDesc Vars[] = 
-        {
-            {"g_Tex", SHADER_VARIABLE_TYPE_MUTABLE},
-            {"g_Sam", SHADER_VARIABLE_TYPE_DYNAMIC},
-            {"g_Tex2", SHADER_VARIABLE_TYPE_DYNAMIC},
-            {"g_Sam2", SHADER_VARIABLE_TYPE_MUTABLE},
-            {"g_Sam4", SHADER_VARIABLE_TYPE_MUTABLE}
-        };
-        Attrs.Desc.VariableDesc = Vars;
-        Attrs.Desc.NumVariables = _countof(Vars);
-        
-        StaticSamplerDesc StaticSamplers[] = 
-        {
-            {"g_Sam2", SamplerDesc{}}
-        };
-        Attrs.Desc.StaticSamplers = StaticSamplers;
-        Attrs.Desc.NumStaticSamplers = _countof(StaticSamplers);
         
         RefCntAutoPtr<IShader> pPS;
         pDevice->CreateShader(Attrs, &pPS);
@@ -102,6 +89,24 @@ TestSeparateTextureSampler::TestSeparateTextureSampler(IRenderDevice *pDevice, I
         PSODesc.GraphicsPipeline.DSVFormat = TEX_FORMAT_UNKNOWN;
         PSODesc.GraphicsPipeline.DepthStencilDesc.DepthEnable = false;
 
+        ShaderResourceVariableDesc Vars[] = 
+        {
+            {SHADER_TYPE_PIXEL, "g_Tex", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE},
+            {SHADER_TYPE_PIXEL, "g_Sam", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC},
+            {SHADER_TYPE_PIXEL, "g_Tex2", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC},
+            {SHADER_TYPE_PIXEL, "g_Sam2", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE},
+            {SHADER_TYPE_PIXEL, "g_Sam4", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE}
+        };
+        PSODesc.ResourceLayout.Variables = Vars;
+        PSODesc.ResourceLayout.NumVariables = _countof(Vars);
+        
+        StaticSamplerDesc StaticSamplers[] = 
+        {
+            {SHADER_TYPE_PIXEL, "g_Sam2", SamplerDesc{}}
+        };
+        PSODesc.ResourceLayout.StaticSamplers = StaticSamplers;
+        PSODesc.ResourceLayout.NumStaticSamplers = _countof(StaticSamplers);
+
         RefCntAutoPtr<IPipelineState> pPSO;
         pDevice->CreatePipelineState(PSODesc, &pPSO);
         
@@ -114,29 +119,30 @@ TestSeparateTextureSampler::TestSeparateTextureSampler(IRenderDevice *pDevice, I
         TexDesc.Usage = USAGE_DEFAULT;
         TexDesc.BindFlags = BIND_SHADER_RESOURCE;
         RefCntAutoPtr<ITexture> pTexture;
-        pDevice->CreateTexture( TexDesc, TextureData(), &pTexture );
+        pDevice->CreateTexture( TexDesc, nullptr, &pTexture );
 
         RefCntAutoPtr<ISampler> pSampler;
         pDevice->CreateSampler( SamplerDesc{}, &pSampler );
         IDeviceObject* ppSamplers[2] = {pSampler, pSampler};
-        pPS->GetShaderVariable("g_Sam3")->SetArray(ppSamplers, 0, 2);
+        pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_Sam3")->SetArray(ppSamplers, 0, 2);
 
         RefCntAutoPtr<IShaderResourceBinding> pSRB;
         pPSO->CreateShaderResourceBinding(&pSRB, true);
 
-        pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_Tex")->Set(pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-        pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_Sam")->Set(pSampler);
-        pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_Sam4")->SetArray(ppSamplers, 0, 2);
-        pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_Tex2")->Set(pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+        pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_Tex")->Set(pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+        pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_Sam")->Set(pSampler);
+        pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_Sam4")->SetArray(ppSamplers, 0, 2);
+        pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_Tex2")->Set(pTexture->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+        VERIFY_EXPR(pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_Sam2") == nullptr);
 
         auto VarCount = pSRB->GetVariableCount(SHADER_TYPE_PIXEL);
         VERIFY_EXPR(VarCount == 4);
         for(Uint32 v=0; v < VarCount; ++v)
         {
-            auto* pVar = pSRB->GetVariable(SHADER_TYPE_PIXEL, v);
+            auto* pVar = pSRB->GetVariableByIndex(SHADER_TYPE_PIXEL, v);
             VERIFY_EXPR(pVar->GetIndex() == v);
-            VERIFY_EXPR(pVar->GetType() == SHADER_VARIABLE_TYPE_MUTABLE || pVar->GetType() == SHADER_VARIABLE_TYPE_DYNAMIC);
-            auto pVar2 = pSRB->GetVariable(SHADER_TYPE_PIXEL, pVar->GetName());
+            VERIFY_EXPR(pVar->GetType() == SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE || pVar->GetType() == SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC);
+            auto pVar2 = pSRB->GetVariableByName(SHADER_TYPE_PIXEL, pVar->GetResourceDesc().Name);
             VERIFY_EXPR(pVar == pVar2);
         }
 
@@ -148,7 +154,7 @@ TestSeparateTextureSampler::TestSeparateTextureSampler(IRenderDevice *pDevice, I
         RenderTargetDesc.Format = TEX_FORMAT_RGBA8_UNORM;
         RenderTargetDesc.Name = "TestSeparateTextureSampler: test render target";
         RefCntAutoPtr<ITexture> pRenderTarget;
-        pDevice->CreateTexture(RenderTargetDesc, TextureData{}, &pRenderTarget);
+        pDevice->CreateTexture(RenderTargetDesc, nullptr, &pRenderTarget);
 
         ITextureView* pRTV[] = {pRenderTarget->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET)};
         pContext->SetRenderTargets(1, pRTV, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -156,7 +162,7 @@ TestSeparateTextureSampler::TestSeparateTextureSampler(IRenderDevice *pDevice, I
         pContext->ClearRenderTarget(pRTV[0], Zero, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
         pContext->SetPipelineState(pPSO);
         pContext->CommitShaderResources(pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-        DrawAttribs DrawAttrs(3, DRAW_FLAG_VERIFY_STATES);
+        DrawAttribs DrawAttrs(3, DRAW_FLAG_VERIFY_ALL);
         pContext->Draw(DrawAttrs);
         
         pContext->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);

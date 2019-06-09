@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -26,6 +26,9 @@
 #include "AppBase.h"
 #include "Timer.h"
 
+namespace Diligent
+{
+
 class MacOSAppBase : public AppBase
 {
 public:
@@ -36,8 +39,12 @@ public:
     virtual void OnMouseUp(int button){}
     virtual void OnMouseMove(int x, int y){}
     virtual void OnKeyPressed(int key){}
+    virtual void OnKeyReleased(int key){}
+    virtual void OnFlagsChanged(bool ShiftPressed, bool ControlPressed, bool AltPressed){}
 
 protected:
-    Diligent::Timer timer;
+    Timer timer;
     double PrevTime = 0.0;
 };
+
+}

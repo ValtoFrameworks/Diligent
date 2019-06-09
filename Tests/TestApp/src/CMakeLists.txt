@@ -85,30 +85,30 @@ endif()
 
 if(PLATFORM_WIN32)
     SET(ENGINE_LIBRARIES
-        GraphicsEngineD3D11-shared
-        GraphicsEngineD3D12-shared 
-        GraphicsEngineOpenGL-shared
+        Diligent-GraphicsEngineD3D11-shared
+        Diligent-GraphicsEngineD3D12-shared 
+        Diligent-GraphicsEngineOpenGL-shared
     )
 elseif(PLATFORM_ANDROID)
     SET(ENGINE_LIBRARIES
-        GraphicsEngineOpenGL-shared
+        Diligent-GraphicsEngineOpenGL-shared
     )
 elseif(PLATFORM_UNIVERSAL_WINDOWS)
     SET(ENGINE_LIBRARIES
-        GraphicsEngineD3D11-static
-        GraphicsEngineD3D12-static
+        Diligent-GraphicsEngineD3D11-static
+        Diligent-GraphicsEngineD3D12-static
     )
 elseif(PLATFORM_LINUX)
     SET(ENGINE_LIBRARIES
-        GraphicsEngineOpenGL-shared
+        Diligent-GraphicsEngineOpenGL-shared
     )
 elseif(PLATFORM_MACOS)
     SET(ENGINE_LIBRARIES
-        GraphicsEngineOpenGL-shared
+        Diligent-GraphicsEngineOpenGL-shared
     )
 elseif(PLATFORM_IOS)
     SET(ENGINE_LIBRARIES
-        GraphicsEngineOpenGL-static
+        Diligent-GraphicsEngineOpenGL-static
     )
 else()
     message(FATAL_ERROR "Undefined platform")
@@ -116,19 +116,19 @@ endif()
 
 target_link_libraries(TestApp 
 PRIVATE 
-    BuildSettings 
+    Diligent-BuildSettings 
 PUBLIC
     NativeAppBase
-    Common 
-    GraphicsTools
-    TargetPlatform
+    Diligent-Common 
+    Diligent-GraphicsTools
+    Diligent-TargetPlatform
     ${ENGINE_LIBRARIES}
 )
 
 if(PLATFORM_UNIVERSAL_WINDOWS)
     target_link_libraries(TestApp PRIVATE dxguid.lib)
 elseif(PLATFORM_ANDROID)
-    target_link_libraries(TestApp PRIVATE GLESv3 PUBLIC NativeAppGlue)
+    target_link_libraries(TestApp PRIVATE GLESv3 PUBLIC native_app_glue)
 elseif(PLATFORM_LINUX)
     target_link_libraries(TestApp PRIVATE GL X11)
 elseif(PLATFORM_MACOS OR PLATFORM_IOS)

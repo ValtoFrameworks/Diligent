@@ -29,21 +29,22 @@
 class UnityAppIOS : public UnityAppBase
 {
 public:
-    UnityAppIOS()
+    virtual void Initialize(int deviceType, void* layer)override final
     {
-        m_DeviceType = Diligent::DeviceType::OpenGLES;
-    }
-    
-    virtual void OnGLContextCreated(void *eaglLayer)override final
-    {
-        InitGraphics(eaglLayer, 0/*Unused*/, 0/*Unused*/);
+        m_DeviceType = static_cast<Diligent::DeviceType>(deviceType);
+        InitGraphics(layer, 0/*Unused*/, 0/*Unused*/);
         InitScene();
     }
 };
 
+namespace Diligent
+{
+
 NativeAppBase* CreateApplication()
 {
     return new UnityAppIOS();
+}
+
 }
 
 // The function must be defined in the plugin

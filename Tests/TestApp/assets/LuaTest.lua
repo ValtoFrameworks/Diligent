@@ -207,9 +207,9 @@ UniformBuffPS = Shader.Create{
 	}
 }
 
-svTestBlock = UniformBuffPS:GetShaderVariable("cbTestBlock")
-svTestBlock2 = ShaderVariable.Create(UniformBuffPS, "cbTestBlock2")
-svTestBlock2:Set(nil)
+--svTestBlock = UniformBuffPS:GetShaderVariable("cbTestBlock")
+--svTestBlock2 = ShaderVariable.Create(UniformBuffPS, "cbTestBlock2")
+--svTestBlock2:Set(nil)
 --Test = svTestBlock2["Error"]
 --svTestBlock2["Error"] = 0
 
@@ -416,12 +416,12 @@ end
 
 TestBuffer2 = Buffer.Create({
 	Name = "Test Buffer2",
-    Usage = "USAGE_CPU_ACCESSIBLE",
+    Usage = "USAGE_STAGING",
 	CPUAccessFlags = {"CPU_ACCESS_WRITE"},
 	uiSizeInBytes = 256
 })
 assert(TestBuffer2.Name == "Test Buffer2")
-assert(TestBuffer2.Usage == "USAGE_CPU_ACCESSIBLE")
+assert(TestBuffer2.Usage == "USAGE_STAGING")
 assert(TestBuffer2.Mode == "BUFFER_MODE_UNDEFINED")
 assert(TestBuffer2.CPUAccessFlags[1] == "CPU_ACCESS_WRITE")
 
@@ -621,7 +621,7 @@ TestDrawAttribs = DrawAttribs.Create{
 	FirstInstanceLocation = 96,
 	pIndirectDrawAttribs = TestBuffer2,
     IndirectAttribsBufferStateTransitionMode = "RESOURCE_STATE_TRANSITION_MODE_NONE",
-    Flags = {"DRAW_FLAG_VERIFY_STATES"}
+    Flags = {"DRAW_FLAG_VERIFY_STATES", "DRAW_FLAG_VERIFY_DRAW_ATTRIBS", "DRAW_FLAG_VERIFY_RENDER_TARGETS"}
 }
 assert( TestDrawAttribs.NumIndices == 128 )
 assert( TestDrawAttribs.IndexType == "VT_UINT16" )

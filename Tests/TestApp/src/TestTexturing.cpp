@@ -28,7 +28,7 @@
 #include <math.h>
 #include "TestTexturing.h"
 #include "GraphicsUtilities.h"
-#include "BasicShaderSourceStreamFactory.h"
+#include "ShaderMacroHelper.h"
 
 using namespace Diligent;
 
@@ -161,14 +161,15 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
         Diligent::BufferData BuffData;
         BuffData.pData = Vertices;
         BuffData.DataSize = BuffDesc.uiSizeInBytes;
-        m_pRenderDevice->CreateBuffer(BuffDesc, BuffData, &m_pVertexBuff);
+        m_pRenderDevice->CreateBuffer(BuffDesc, &BuffData, &m_pVertexBuff);
     }
     
     auto PixelFormatAttribs = m_pRenderDevice->GetTextureFormatInfoExt(m_TextureFormat);
 
-    ShaderCreationAttribs CreationAttrs;
-    BasicShaderSourceStreamFactory BasicSSSFactory;
-    CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
+    ShaderCreateInfo CreationAttrs;
+    RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
+    pDevice->GetEngineFactory()->CreateDefaultShaderSourceStreamFactory("Shaders", &pShaderSourceFactory);
+    CreationAttrs.pShaderSourceStreamFactory = pShaderSourceFactory;
     CreationAttrs.Desc.TargetProfile = bUseGLSL ? SHADER_PROFILE_GL_4_2 : SHADER_PROFILE_DX_5_0;
     CreationAttrs.UseCombinedTextureSamplers = true;
 
@@ -179,27 +180,32 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
         m_pRenderDevice->CreateShader( CreationAttrs, &pVS );
     }
 
-    bool bIsIntTexture = PixelFormatAttribs.ComponentType == COMPONENT_TYPE_UINT ||
-                         PixelFormatAttribs.ComponentType == COMPONENT_TYPE_SINT;
+    bool bIsIntTexture = false;
     {
-        if( bIsIntTexture )
-            CreationAttrs.FilePath = bUseGLSL ? "Shaders\\TextureIntTestGL.psh" : "Shaders\\TextureIntTestDX.psh";
+        ShaderMacroHelper Macros;
+        if (PixelFormatAttribs.ComponentType == COMPONENT_TYPE_UINT || 
+            PixelFormatAttribs.ComponentType == COMPONENT_TYPE_SINT)
+        {
+            if (bUseGLSL)
+            {
+                CreationAttrs.FilePath = "Shaders\\TextureIntTestGL.psh";
+                Macros.AddShaderMacro("SAMPLER_TYPE", PixelFormatAttribs.ComponentType == COMPONENT_TYPE_UINT ? "usampler2D" : "isampler2D");
+            }
+            else
+            {
+                CreationAttrs.FilePath = "Shaders\\TextureIntTestDX.psh";
+                Macros.AddShaderMacro("DATA_TYPE", PixelFormatAttribs.ComponentType == COMPONENT_TYPE_UINT ? "uint4" : "int4");
+            }
+               
+            bIsIntTexture = true;
+        }
         else
+        {
             CreationAttrs.FilePath = bUseGLSL ? "Shaders\\TextureTestGL.psh" : "Shaders\\TextureTestDX.psh";
+            bIsIntTexture = false;
+        }
         CreationAttrs.Desc.ShaderType =  SHADER_TYPE_PIXEL;
-        
-        StaticSamplerDesc StaticSampler;
-        // On Intel HW, only point filtering sampler correctly works with an integer texture.
-        // If the sampler defines linear filtering, the texture is not properly bound to the
-        // sampler unit and zero is always returned.
-        // Note that on NVidia HW this works fine.
-        auto FilterType = bIsIntTexture ? FILTER_TYPE_POINT : FILTER_TYPE_LINEAR;
-        StaticSampler.Desc.MinFilter = FilterType;
-        StaticSampler.Desc.MagFilter = FilterType;
-        StaticSampler.Desc.MipFilter = FilterType;
-        StaticSampler.SamplerOrTextureName = "g_tex2DTest";
-        CreationAttrs.Desc.NumStaticSamplers = 1;
-        CreationAttrs.Desc.StaticSamplers = &StaticSampler;
+        CreationAttrs.Macros = Macros;
         m_pRenderDevice->CreateShader( CreationAttrs, &pPS );
     }
 
@@ -234,7 +240,7 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
         TexData.pSubResources = SubResouces.data();
         TexData.NumSubresources = (Uint32)SubResouces.size();
 
-        m_pRenderDevice->CreateTexture( TexDesc, TexData, &m_pTexture );
+        m_pRenderDevice->CreateTexture( TexDesc, &TexData, &m_pTexture );
     }
     
     {
@@ -264,15 +270,29 @@ void TestTexturing::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceContext
 
     LayoutElement Elems[] =
     {
-        LayoutElement( 0, 0, 3, Diligent::VT_FLOAT32, false, 0 ),
-        LayoutElement( 1, 0, 2, Diligent::VT_FLOAT32, false, sizeof( float ) * 3 )
+        LayoutElement{ 0, 0, 3, Diligent::VT_FLOAT32, false, 0 },
+        LayoutElement{ 1, 0, 2, Diligent::VT_FLOAT32, false, sizeof( float ) * 3 }
     };
     PSODesc.GraphicsPipeline.InputLayout.LayoutElements = Elems;
     PSODesc.GraphicsPipeline.InputLayout.NumElements = _countof( Elems );
+
+    StaticSamplerDesc StaticSampler;
+    // On Intel HW, only point filtering sampler correctly works with an integer texture.
+    // If the sampler defines linear filtering, the texture is not properly bound to the
+    // sampler unit and zero is always returned.
+    // Note that on NVidia HW this works fine.
+    auto FilterType = bIsIntTexture ? FILTER_TYPE_POINT : FILTER_TYPE_LINEAR;
+    StaticSampler.Desc.MinFilter = FilterType;
+    StaticSampler.Desc.MagFilter = FilterType;
+    StaticSampler.Desc.MipFilter = FilterType;
+    StaticSampler.ShaderStages = SHADER_TYPE_PIXEL;
+    StaticSampler.SamplerOrTextureName = "g_tex2DTest";
+    PSODesc.ResourceLayout.NumStaticSamplers = !(bIsIntTexture && pDevice->GetDeviceCaps().IsD3DDevice()) ? 1 : 0;
+    PSODesc.ResourceLayout.StaticSamplers = &StaticSampler;
+
     pDevice->CreatePipelineState(PSODesc, &m_pPSO);
     
-    pVS->BindResources(m_pResourceMapping, 0);
-    pPS->BindResources(m_pResourceMapping, 0);
+    m_pPSO->BindStaticResources(SHADER_TYPE_VERTEX | SHADER_TYPE_PIXEL, m_pResourceMapping, 0);
     
     m_pPSO->CreateShaderResourceBinding(&m_pSRB, true);
 
@@ -293,7 +313,7 @@ void TestTexturing::Draw()
     m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Offsets, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET );
 
     // Draw quad
-    Diligent::DrawAttribs DrawAttrs(4, DRAW_FLAG_VERIFY_STATES);
+    Diligent::DrawAttribs DrawAttrs(4, DRAW_FLAG_VERIFY_ALL);
     m_pDeviceContext->Draw( DrawAttrs );
     
     SetStatus(TestResult::Succeeded);

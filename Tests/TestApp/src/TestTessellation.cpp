@@ -27,7 +27,6 @@
 #include "pch.h"
 #include "TestTessellation.h"
 #include "MapHelper.h"
-#include "BasicShaderSourceStreamFactory.h"
 
 using namespace Diligent;
 
@@ -41,9 +40,10 @@ void TestTessellation::Init( IRenderDevice *pDevice, IDeviceContext *pDeviceCont
     
     m_pDeviceContext = pDeviceContext;
 
-    ShaderCreationAttribs CreationAttrs;
-    BasicShaderSourceStreamFactory BasicSSSFactory;
-    CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
+    ShaderCreateInfo CreationAttrs;
+    RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
+    pDevice->GetEngineFactory()->CreateDefaultShaderSourceStreamFactory("Shaders", &pShaderSourceFactory);
+    CreationAttrs.pShaderSourceStreamFactory = pShaderSourceFactory;
     CreationAttrs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
     CreationAttrs.UseCombinedTextureSamplers = true;
 
@@ -135,7 +135,7 @@ void TestTessellation::Draw()
     m_pDeviceContext->CommitShaderResources(nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
     // Draw 2 quad patches
-    Diligent::DrawAttribs DrawAttrs(2, DRAW_FLAG_VERIFY_STATES);
+    Diligent::DrawAttribs DrawAttrs(2, DRAW_FLAG_VERIFY_ALL);
     m_pDeviceContext->Draw(DrawAttrs);
 
     m_pDeviceContext->SetPipelineState(m_pTriPSO);

@@ -1,4 +1,4 @@
-/*     Copyright 2015-2018 Egor Yusov
+/*     Copyright 2015-2019 Egor Yusov
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
 *  you may not use this file except in compliance with the License.
@@ -24,7 +24,8 @@
 #include <queue>
 #include "TestApp.h"
 
-using namespace Diligent;
+namespace Diligent
+{
 
 class TestAppMacOS final : public TestApp
 {
@@ -45,4 +46,6 @@ public:
 NativeAppBase* CreateApplication()
 {
     return new TestAppMacOS;
+}
+
 }

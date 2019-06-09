@@ -13,7 +13,7 @@
 #include "RenderDeviceD3D12.h"
 #include "DeviceContextD3D12.h"
 #include "CommandQueueD3D12.h"
-#include "RenderDeviceFactoryD3D12.h"
+#include "EngineFactoryD3D12.h"
 #include "SwapChainBase.h"
 #include "DefaultRawMemoryAllocator.h"
 #include "DXGITypeConversions.h"
@@ -149,6 +149,9 @@ public:
         m_SwapChainDesc.Width = SwapChainDesc.Width;
         m_SwapChainDesc.Height = SwapChainDesc.Height;
         m_SwapChainDesc.ColorBufferFormat = DXGI_FormatToTexFormat(SwapChainDesc.Format);
+        if (m_SwapChainDesc.ColorBufferFormat == TEX_FORMAT_RGBA8_UNORM)
+            m_SwapChainDesc.ColorBufferFormat = TEX_FORMAT_RGBA8_UNORM_SRGB;
+
         const auto DepthBufferDesc = pd3d12DepthBuffer->GetDesc();
         m_SwapChainDesc.DepthBufferFormat = DXGI_FormatToTexFormat(DepthBufferDesc.Format);
 
@@ -204,9 +207,9 @@ DiligentGraphicsAdapterD3D12::DiligentGraphicsAdapterD3D12(UnityGraphicsD3D12Emu
     auto CmdQueue = NEW_RC_OBJ(DefaultAllocator, "UnityCommandQueueImpl instance", ProxyCommandQueueD3D12)(*GraphicsImpl);
 
     auto *pFactoryD3D12 = GetEngineFactoryD3D12();
-    EngineD3D12Attribs Attribs;
+    EngineD3D12CreateInfo Attribs;
     std::array<ICommandQueueD3D12*, 1> CmdQueues = {CmdQueue};
-    pFactoryD3D12->AttachToD3D12Device(d3d12Device, CmdQueues.size(), CmdQueues.data(), Attribs, &m_pDevice, &m_pDeviceCtx, 0);
+    pFactoryD3D12->AttachToD3D12Device(d3d12Device, CmdQueues.size(), CmdQueues.data(), Attribs, &m_pDevice, &m_pDeviceCtx);
 }
 
 void DiligentGraphicsAdapterD3D12::InitProxySwapChain()
@@ -230,6 +233,7 @@ void DiligentGraphicsAdapterD3D12::PreSwapChainResize()
     // We must idle GPU
     GraphicsImpl->IdleGPU();
     // And call FinishFrame() to release references to swap chain resources
+    m_pDeviceCtx->FinishFrame();
     pDeviceD3D12->ReleaseStaleResources();
 }
 

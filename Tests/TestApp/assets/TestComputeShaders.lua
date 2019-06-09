@@ -170,12 +170,9 @@ FillTextureCS = Shader.Create{
     UseCombinedTextureSamplers = true,
 	Desc = 
 	{
-		ShaderType = "SHADER_TYPE_COMPUTE",
-		VariableDesc = {{Name = "g_tex2DTestUAV", Type = "SHADER_VARIABLE_TYPE_DYNAMIC"}}
+		ShaderType = "SHADER_TYPE_COMPUTE"
 	}
 }
-assert(FillTextureCS.Desc.VariableDesc[1].Name == "g_tex2DTestUAV");
-assert(FillTextureCS.Desc.VariableDesc[1].Type == "SHADER_VARIABLE_TYPE_DYNAMIC");
 
 UpdateVertBuffCS = Shader.Create{
 	FilePath =  GetShaderPath("CSTest\\UpdateVertBuff", "csh", true),
@@ -216,12 +213,20 @@ RenderPS = Shader.Create{
 FillTexturePSO = PipelineState.Create
 {
 	Name = "FillTexturePSO",
+    ResourceLayout = 
+    {
+		Variables = {{ShaderStages = "SHADER_TYPE_COMPUTE", Name = "g_tex2DTestUAV", Type = "SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC"}}
+    },
 	IsComputePipeline=true,
 	ComputePipeline = 
 	{
 		pCS = FillTextureCS
 	}
 }
+assert(FillTexturePSO.ResourceLayout.Variables[1].ShaderStages[1] == "SHADER_TYPE_COMPUTE");
+assert(FillTexturePSO.ResourceLayout.Variables[1].Name == "g_tex2DTestUAV");
+assert(FillTexturePSO.ResourceLayout.Variables[1].Type == "SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC");
+
 FillTextureSRB = FillTexturePSO:CreateShaderResourceBinding()
 
 UpdateVertBuffPSO = PipelineState.Create
@@ -293,14 +298,13 @@ RenderPSO = PipelineState.Create
         PrimitiveTopology = "PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP"
 	}
 }
+RenderPSO:BindStaticResources({"SHADER_TYPE_VERTEX", "SHADER_TYPE_PIXEL"}, ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
 RenderSRB = RenderPSO:CreateShaderResourceBinding()
 
-UpdateVertBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED", "BIND_SHADER_RESOURCES_UPDATE_STATIC"} )
-UpdateIndBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED", "BIND_SHADER_RESOURCES_UPDATE_ALL"})
-UpdateDrawArgsBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
-UpdateDispatchArgsBuffCS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
-RenderVS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
-RenderPS:BindResources(ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
+UpdateVertBuffPSO:BindStaticResources("SHADER_TYPE_COMPUTE", ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED", "BIND_SHADER_RESOURCES_UPDATE_STATIC"} )
+UpdateIndBuffPSO:BindStaticResources("SHADER_TYPE_COMPUTE", ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED", "BIND_SHADER_RESOURCES_UPDATE_ALL"})
+UpdateDrawArgsBuffPSO:BindStaticResources("SHADER_TYPE_COMPUTE", ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
+UpdateDispatchArgsBuffPSO:BindStaticResources("SHADER_TYPE_COMPUTE", ResMapping, {"BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED"})
 
 FillTextureSRB:InitializeStaticResources()
 UpdateVertBuffSRB:InitializeStaticResources()
@@ -314,7 +318,7 @@ DrawAttrs = DrawAttribs.Create{
 	IndexType = "VT_UINT32",
 	pIndirectDrawAttribs = IndirectDrawArgsBuffer,
     IndirectAttribsBufferStateTransitionMode = "RESOURCE_STATE_TRANSITION_MODE_TRANSITION",
-    Flags = {"DRAW_FLAG_VERIFY_STATES"}
+    Flags = {"DRAW_FLAG_VERIFY_ALL"}
 }
 
 
@@ -329,7 +333,7 @@ function Draw()
 end
 
 
-tex2DTestUAV = FillTextureSRB:GetVariable("SHADER_TYPE_COMPUTE", "g_tex2DTestUAV")
+tex2DTestUAV = FillTextureSRB:GetVariableByName("SHADER_TYPE_COMPUTE", "g_tex2DTestUAV")
 
 function Dispatch()
 

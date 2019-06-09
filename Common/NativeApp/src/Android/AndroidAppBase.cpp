@@ -30,11 +30,14 @@
 #include <android/native_window_jni.h>
 //#include <cpu-features.h>
 
+namespace Diligent
+{
+
 int AndroidAppBase::InitDisplay()
 {
     if( !initialized_resources_ )
     {
-        Initialize(app_->window);
+        Initialize();
 
         LoadResources();
         initialized_resources_ = true;
@@ -48,7 +51,7 @@ int AndroidAppBase::InitDisplay()
             LoadResources();
         }
     }
-    
+
     ShowUI();
 
     //tap_camera_.SetFlip( 1.f, -1.f, -1.f );
@@ -86,7 +89,7 @@ void AndroidAppBase::DrawFrame()
     auto CurrTime = Timer.GetElapsedTime();
     auto ElapsedTime = CurrTime - PrevTime;
     PrevTime = CurrTime;
-    
+
     Update(CurrTime, ElapsedTime);
 
     Render();
@@ -208,9 +211,10 @@ void AndroidAppBase::SuspendSensors()
 //-------------------------------------------------------------------------
 //Misc
 //-------------------------------------------------------------------------
-void AndroidAppBase::SetState( android_app* state )
+void AndroidAppBase::SetState( android_app* state, const char* native_activity_class_name )
 {
     app_ = state;
+    native_activity_class_name_ = native_activity_class_name;
     doubletap_detector_.SetConfiguration( app_->config );
     drag_detector_.SetConfiguration( app_->config );
     pinch_detector_.SetConfiguration( app_->config );
@@ -257,4 +261,6 @@ void AndroidAppBase::UpdateFPS( float fFPS )
 
     app_->activity->vm->DetachCurrentThread();
     return;
+}
+
 }

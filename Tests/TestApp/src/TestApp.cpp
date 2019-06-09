@@ -31,23 +31,23 @@
 #include "StringTools.h"
 
 #if D3D11_SUPPORTED
-#   include "RenderDeviceFactoryD3D11.h"
+#   include "EngineFactoryD3D11.h"
 #endif
 
 #if D3D12_SUPPORTED
-#   include "RenderDeviceFactoryD3D12.h"
+#   include "EngineFactoryD3D12.h"
 #endif
 
 #if GL_SUPPORTED || GLES_SUPPORTED
-#   include "RenderDeviceFactoryOpenGL.h"
+#   include "EngineFactoryOpenGL.h"
 #endif
 
 #if VULKAN_SUPPORTED
-#   include "RenderDeviceFactoryVk.h"
+#   include "EngineFactoryVk.h"
 #endif
 
 #if METAL_SUPPORTED
-#   include "RenderDeviceFactoryMtl.h"
+#   include "EngineFactoryMtl.h"
 #endif
 
 #include "FileSystem.h"
@@ -65,6 +65,7 @@
     #include "ShaderConverterTest.h"
 #endif
 #include "TestCopyTexData.h"
+#include "TestMipMapsGeneration.h"
 #include "PlatformMisc.h"
 #include "TestBufferCreation.h"
 #include "TestBrokenShader.h"
@@ -73,7 +74,8 @@
 #include "TestSeparateTextureSampler.h"
 #include "StringTools.h"
 
-using namespace Diligent;
+namespace Diligent
+{
 
 TestApp::TestApp() :
     m_AppTitle("Test app")
@@ -163,7 +165,7 @@ void TestApp::InitializeDiligentEngine(
 #if D3D11_SUPPORTED
         case DeviceType::D3D11:
         {
-            EngineD3D11Attribs DeviceAttribs;
+            EngineD3D11CreateInfo DeviceAttribs;
 #if ENGINE_DLL
             GetEngineFactoryD3D11Type GetEngineFactoryD3D11 = nullptr;
             // Load the dll and import GetEngineFactoryD3D11() function
@@ -185,8 +187,9 @@ void TestApp::InitializeDiligentEngine(
                 AdapterDisplayModes.emplace_back(std::move(DisplayModes));
             }
 
+            DeviceAttribs.NumDeferredContexts = NumDeferredCtx;
             ppContexts.resize(1 + NumDeferredCtx);
-            pFactoryD3D11->CreateDeviceAndContextsD3D11(DeviceAttribs, &m_pDevice, ppContexts.data(), NumDeferredCtx);
+            pFactoryD3D11->CreateDeviceAndContextsD3D11(DeviceAttribs, &m_pDevice, ppContexts.data());
 
             if(NativeWindowHandle != nullptr)
                 pFactoryD3D11->CreateSwapChainD3D11(m_pDevice, ppContexts[0], SCDesc, FullScreenModeDesc{}, NativeWindowHandle, &m_pSwapChain);
@@ -218,7 +221,7 @@ void TestApp::InitializeDiligentEngine(
                 AdapterDisplayModes.emplace_back(std::move(DisplayModes));
             }
 
-            EngineD3D12Attribs EngD3D12Attribs;
+            EngineD3D12CreateInfo EngD3D12Attribs;
             EngD3D12Attribs.CPUDescriptorHeapAllocationSize[0] = 64; // D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
             EngD3D12Attribs.CPUDescriptorHeapAllocationSize[1] = 32; // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
             EngD3D12Attribs.CPUDescriptorHeapAllocationSize[2] = 16; // D3D12_DESCRIPTOR_HEAP_TYPE_RTV
@@ -227,7 +230,8 @@ void TestApp::InitializeDiligentEngine(
             EngD3D12Attribs.DynamicDescriptorAllocationChunkSize[1] = 8; // D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
             ppContexts.resize(1 + NumDeferredCtx);
             
-            pFactoryD3D12->CreateDeviceAndContextsD3D12(EngD3D12Attribs, &m_pDevice, ppContexts.data(), NumDeferredCtx);
+            EngD3D12Attribs.NumDeferredContexts = NumDeferredCtx;
+            pFactoryD3D12->CreateDeviceAndContextsD3D12(EngD3D12Attribs, &m_pDevice, ppContexts.data());
 
             if (!m_pSwapChain && NativeWindowHandle != nullptr)
                 pFactoryD3D12->CreateSwapChainD3D12(m_pDevice, ppContexts[0], SCDesc, FullScreenModeDesc{}, NativeWindowHandle, &m_pSwapChain);
@@ -242,14 +246,14 @@ void TestApp::InitializeDiligentEngine(
 #if !PLATFORM_MACOS
             VERIFY_EXPR(NativeWindowHandle != nullptr);
 #endif
-#if ENGINE_DLL && (PLATFORM_WIN32 || PLATFORM_UNIVERSAL_WINDOWS)
+#if EXPLICITLY_LOAD_ENGINE_GL_DLL
             // Declare function pointer
             GetEngineFactoryOpenGLType GetEngineFactoryOpenGL = nullptr;
             // Load the dll and import GetEngineFactoryOpenGL() function
             LoadGraphicsEngineOpenGL(GetEngineFactoryOpenGL);
 #endif
-            auto *pFactoryOpenGL = GetEngineFactoryOpenGL();
-            EngineGLAttribs CreationAttribs;
+            auto* pFactoryOpenGL = GetEngineFactoryOpenGL();
+            EngineGLCreateInfo CreationAttribs;
             CreationAttribs.pNativeWndHandle = NativeWindowHandle;
 #if PLATFORM_LINUX
             CreationAttribs.pDisplay = display;
@@ -269,16 +273,16 @@ void TestApp::InitializeDiligentEngine(
 #if VULKAN_SUPPORTED
         case DeviceType::Vulkan:
         {
-#if ENGINE_DLL && PLATFORM_WIN32
+#if EXPLICITLY_LOAD_ENGINE_VK_DLL
             GetEngineFactoryVkType GetEngineFactoryVk = nullptr;
             // Load the dll and import GetEngineFactoryVk() function
             LoadGraphicsEngineVk(GetEngineFactoryVk);
 #endif
-            EngineVkAttribs EngVkAttribs;
+            EngineVkCreateInfo EngVkAttribs;
 
             EngVkAttribs.EnableValidation = true;
-            EngVkAttribs.MainDescriptorPoolSize = EngineVkAttribs::DescriptorPoolSize{ 64, 64, 256, 256, 64, 32, 32, 32, 32 };
-            EngVkAttribs.DynamicDescriptorPoolSize = EngineVkAttribs::DescriptorPoolSize{ 64, 64, 256, 256, 64, 32, 32, 32, 32 };
+            EngVkAttribs.MainDescriptorPoolSize = EngineVkCreateInfo::DescriptorPoolSize{ 64, 64, 256, 256, 64, 32, 32, 32, 32 };
+            EngVkAttribs.DynamicDescriptorPoolSize = EngineVkCreateInfo::DescriptorPoolSize{ 64, 64, 256, 256, 64, 32, 32, 32, 32 };
             EngVkAttribs.UploadHeapPageSize = 32*1024;
             //EngVkAttribs.DeviceLocalMemoryReserveSize = 32 << 20;
             //EngVkAttribs.HostVisibleMemoryReserveSize = 48 << 20;
@@ -298,9 +302,10 @@ void TestApp::InitializeDiligentEngine(
             Features.vertexPipelineStoresAndAtomics = true;
             Features.fragmentStoresAndAtomics       = true;
 
+            EngVkAttribs.NumDeferredContexts = NumDeferredCtx;
             ppContexts.resize(1 + NumDeferredCtx);
             auto *pFactoryVk = GetEngineFactoryVk();
-            pFactoryVk->CreateDeviceAndContextsVk(EngVkAttribs, &m_pDevice, ppContexts.data(), NumDeferredCtx);
+            pFactoryVk->CreateDeviceAndContextsVk(EngVkAttribs, &m_pDevice, ppContexts.data());
 
             if (!m_pSwapChain && NativeWindowHandle != nullptr)
                 pFactoryVk->CreateSwapChainVk(m_pDevice, ppContexts[0], SCDesc, NativeWindowHandle, &m_pSwapChain);
@@ -311,11 +316,12 @@ void TestApp::InitializeDiligentEngine(
 #if METAL_SUPPORTED
         case DeviceType::Metal:
         {
-            EngineMtlAttribs MtlAttribs;
+            EngineMtlCreateInfo MtlAttribs;
 
+            MtlAttribs.NumDeferredContexts = NumDeferredCtx;
             ppContexts.resize(1 + NumDeferredCtx);
             auto *pFactoryMtl = GetEngineFactoryMtl();
-            pFactoryMtl->CreateDeviceAndContextsMtl(MtlAttribs, &m_pDevice, ppContexts.data(), NumDeferredCtx);
+            pFactoryMtl->CreateDeviceAndContextsMtl(MtlAttribs, &m_pDevice, ppContexts.data());
 
             if (!m_pSwapChain && NativeWindowHandle != nullptr)
                 pFactoryMtl->CreateSwapChainMtl(m_pDevice, ppContexts[0], SCDesc, NativeWindowHandle, &m_pSwapChain);
@@ -363,7 +369,7 @@ void TestApp::InitializeRenderers()
     TestTextureCreation TestTexCreation{m_pDevice, m_pImmediateContext};
     TestPSOCompatibility TestPSOCompat{m_pDevice};
     TestBrokenShader TestBrknShdr{m_pDevice};
-        
+
     m_TestGS.Init(m_pDevice, m_pImmediateContext, m_pSwapChain);
     m_TestTessellation.Init(m_pDevice, m_pImmediateContext, m_pSwapChain);
     m_pTestShaderResArrays.reset(new TestShaderResArrays(m_pDevice, m_pImmediateContext, m_pSwapChain, 0.4f, -0.9f, 0.5f, 0.5f));
@@ -371,7 +377,7 @@ void TestApp::InitializeRenderers()
     TestShaderVarAccess TestShaderVarAccess{m_pDevice, m_pImmediateContext, m_pSwapChain};
     TestShaderResourceLayout TestShaderResLayout{m_pDevice, m_pImmediateContext};
     
-#if GL_SUPPORTED || GLES_SUPPORTED || VULKAN_SUPPORTED
+#if GL_SUPPORTED || GLES_SUPPORTED
     ShaderConverterTest ConverterTest{m_pDevice, m_pImmediateContext};
 #endif
     
@@ -411,6 +417,7 @@ void TestApp::InitializeRenderers()
         }
 
     TestCopyTexData TestCopyData(m_pDevice, m_pImmediateContext);
+    TestMipMapsGeneration TestMipsGen(m_pDevice, m_pImmediateContext);
 
     TestVPAndSR TestVPAndSR(m_pDevice, m_pImmediateContext);
 
@@ -436,7 +443,7 @@ void TestApp::InitializeRenderers()
         //Diligent::BufferData BuffData;
         //BuffData.pData = instance_offsets;
         //BuffData.DataSize = sizeof(instance_offsets);
-        m_pDevice->CreateBuffer(BuffDesc, Diligent::BufferData(), &m_pInstBuff2);
+        m_pDevice->CreateBuffer(BuffDesc, nullptr, &m_pInstBuff2);
     }
     
 
@@ -452,7 +459,7 @@ void TestApp::InitializeRenderers()
         BuffDesc.BindFlags = BIND_UNIFORM_BUFFER;
         BuffDesc.Usage = USAGE_DYNAMIC;
         BuffDesc.CPUAccessFlags = CPU_ACCESS_WRITE;
-        m_pDevice->CreateBuffer(BuffDesc, BufferData(), &m_pUniformBuff2);
+        m_pDevice->CreateBuffer(BuffDesc, nullptr, &m_pUniformBuff2);
     }
 
     {
@@ -466,7 +473,7 @@ void TestApp::InitializeRenderers()
         Diligent::BufferData BuffData;
         BuffData.pData = UniformData;
         BuffData.DataSize = sizeof(UniformData);
-        m_pDevice->CreateBuffer(BuffDesc, BuffData, &m_pUniformBuff3);
+        m_pDevice->CreateBuffer(BuffDesc, &BuffData, &m_pUniformBuff3);
     }
 
     {
@@ -480,7 +487,7 @@ void TestApp::InitializeRenderers()
         Diligent::BufferData BuffData;
         BuffData.pData = UniformData;
         BuffData.DataSize = sizeof(UniformData);
-        m_pDevice->CreateBuffer(BuffDesc, BuffData, &m_pUniformBuff4);
+        m_pDevice->CreateBuffer(BuffDesc, &BuffData, &m_pUniformBuff4);
     }
 
     {
@@ -502,10 +509,10 @@ void TestApp::InitializeRenderers()
         TexDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET | BIND_UNORDERED_ACCESS;
         TexDesc.Name = "UniqueTexture";
 
-        m_pDevice->CreateTexture(TexDesc, TextureData(), &m_pTestTex);
+        m_pDevice->CreateTexture(TexDesc, nullptr, &m_pTestTex);
 
         m_pTestTex.Release();
-        m_pDevice->CreateTexture(TexDesc, TextureData(), &m_pTestTex);
+        m_pDevice->CreateTexture(TexDesc, nullptr, &m_pTestTex);
     }
 
     {
@@ -520,13 +527,13 @@ void TestApp::InitializeRenderers()
         TexDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET;
         TexDesc.Name = "UniqueTexture";
         RefCntAutoPtr<ITexture> pTex;
-        m_pDevice->CreateTexture(TexDesc, TextureData(), &pTex);
+        m_pDevice->CreateTexture(TexDesc, nullptr, &pTex);
         ITextureView *pRTVs[] = { pTex->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET) };
 
         TexDesc.Format = m_pSwapChain->GetDesc().DepthBufferFormat;
         RefCntAutoPtr<ITexture> pDepthTex;
         TexDesc.BindFlags = BIND_DEPTH_STENCIL;
-        m_pDevice->CreateTexture(TexDesc, TextureData(), &pDepthTex);
+        m_pDevice->CreateTexture(TexDesc, nullptr, &pDepthTex);
         auto* pDSV = pDepthTex->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
 
         {
@@ -547,7 +554,7 @@ void TestApp::InitializeRenderers()
         m_pImmediateContext->ClearRenderTarget(nullptr, ClearColor, RESOURCE_STATE_TRANSITION_MODE_VERIFY);
         DrawAttribs DrawAttrs;
         DrawAttrs.NumVertices = 3;
-        DrawAttrs.Flags = DRAW_FLAG_VERIFY_STATES;
+        DrawAttrs.Flags = DRAW_FLAG_VERIFY_ALL;
         m_pRenderScript->Run(m_pImmediateContext, "DrawTris", DrawAttrs);
         
         // This adds transition barrier for pTex1
@@ -573,7 +580,7 @@ void TestApp::InitializeRenderers()
         BuffData.DataSize = sizeof(Data);
         // This will result in creating and executing another command list
         RefCntAutoPtr<IBuffer> pBuff;
-        m_pDevice->CreateBuffer(BuffDesc, BuffData, &pBuff);
+        m_pDevice->CreateBuffer(BuffDesc, &BuffData, &pBuff);
 
         // This may cause D3D12 error
         m_pImmediateContext->Flush();
@@ -588,7 +595,7 @@ void TestApp::InitializeRenderers()
 
 void TestApp::ProcessCommandLine(const char *CmdLine)
 {
-    const auto* Key = "mode=";
+    const auto* Key = "-mode ";
     const auto *pos = strstr(CmdLine, Key);
     if (pos != nullptr)
     {
@@ -683,14 +690,14 @@ void TestApp::Render()
 
     DrawAttribs DrawAttrs;
     DrawAttrs.NumVertices = 3;
-    DrawAttrs.Flags = DRAW_FLAG_VERIFY_STATES;
+    DrawAttrs.Flags = DRAW_FLAG_VERIFY_ALL;
     m_pRenderScript->Run(m_pImmediateContext, "DrawTris", DrawAttrs);
 
     DrawAttrs.IsIndexed = true;
     DrawAttrs.NumIndices = 3;
     DrawAttrs.IndexType = VT_UINT32;
     DrawAttrs.NumInstances = 3;
-    DrawAttrs.Flags = DRAW_FLAG_VERIFY_STATES;
+    DrawAttrs.Flags = DRAW_FLAG_VERIFY_ALL;
     m_pRenderScript->Run(m_pImmediateContext, "DrawTris", DrawAttrs);
     m_pTestDrawCommands->Draw();
     m_pTestBufferAccess->Draw((float)dCurrTime);
@@ -719,4 +726,6 @@ void TestApp::Render()
 void TestApp::Present()
 {
     m_pSwapChain->Present(0);
+}
+
 }

@@ -60,43 +60,43 @@ SamplePlugin::SamplePlugin(Diligent::IRenderDevice *pDevice, bool UseReverseZ, T
         PSODesc.GraphicsPipeline.BlendDesc.RenderTargets[0].SrcBlendAlpha = BLEND_FACTOR_ZERO;
         PSODesc.GraphicsPipeline.BlendDesc.RenderTargets[0].DestBlendAlpha = BLEND_FACTOR_ONE;
 
-        ShaderCreationAttribs CreationAttribs;
-        CreationAttribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-        CreationAttribs.Desc.DefaultVariableType = SHADER_VARIABLE_TYPE_STATIC;
-        CreationAttribs.UseCombinedTextureSamplers = true;
+        ShaderCreateInfo ShaderCI;
+        ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+        ShaderCI.UseCombinedTextureSamplers = true;
 
         CreateUniformBuffer(pDevice, sizeof(float4x4), "SamplePlugin: VS constants CB", &m_VSConstants);
 
         RefCntAutoPtr<IShader> pVS;
         {
-            CreationAttribs.Desc.ShaderType = SHADER_TYPE_VERTEX;
-            CreationAttribs.EntryPoint = "main";
-            CreationAttribs.Desc.Name = "Sample cube VS";
-            CreationAttribs.Source = VSSource;
-            pDevice->CreateShader(CreationAttribs, &pVS);
-            pVS->GetShaderVariable("Constants")->Set(m_VSConstants);
+            ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+            ShaderCI.EntryPoint = "main";
+            ShaderCI.Desc.Name = "Sample cube VS";
+            ShaderCI.Source = VSSource;
+            pDevice->CreateShader(ShaderCI, &pVS);
         }
 
         RefCntAutoPtr<IShader> pPS;
         {
-            CreationAttribs.Desc.ShaderType = SHADER_TYPE_PIXEL;
-            CreationAttribs.EntryPoint = "main";
-            CreationAttribs.Desc.Name = "Sample cube PS";
-            CreationAttribs.Source = PSSource;
-            pDevice->CreateShader(CreationAttribs, &pPS);
+            ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
+            ShaderCI.EntryPoint = "main";
+            ShaderCI.Desc.Name = "Sample cube PS";
+            ShaderCI.Source = PSSource;
+            pDevice->CreateShader(ShaderCI, &pPS);
         }
 
         LayoutElement LayoutElems[] =
         {
-            LayoutElement(0, 0, 3, VT_FLOAT32, False),
-            LayoutElement(1, 0, 4, VT_FLOAT32, False)
+            LayoutElement{0, 0, 3, VT_FLOAT32, False},
+            LayoutElement{1, 0, 4, VT_FLOAT32, False}
         };
 
+        PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
         PSODesc.GraphicsPipeline.pVS = pVS;
         PSODesc.GraphicsPipeline.pPS = pPS;
         PSODesc.GraphicsPipeline.InputLayout.LayoutElements = LayoutElems;
-        PSODesc.GraphicsPipeline.InputLayout.NumElements = _countof(LayoutElems);
+        PSODesc.GraphicsPipeline.InputLayout.NumElements    = _countof(LayoutElems);
         pDevice->CreatePipelineState(PSODesc, &m_PSO);
+        m_PSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "Constants")->Set(m_VSConstants);
         m_PSO->CreateShaderResourceBinding(&m_SRB, true);
     }
 
@@ -126,7 +126,7 @@ SamplePlugin::SamplePlugin(Diligent::IRenderDevice *pDevice, bool UseReverseZ, T
         BufferData VBData;
         VBData.pData = CubeVerts;
         VBData.DataSize = sizeof(CubeVerts);
-        pDevice->CreateBuffer(VertBuffDesc, VBData, &m_CubeVertexBuffer);
+        pDevice->CreateBuffer(VertBuffDesc, &VBData, &m_CubeVertexBuffer);
     }
 
     {
@@ -147,7 +147,7 @@ SamplePlugin::SamplePlugin(Diligent::IRenderDevice *pDevice, bool UseReverseZ, T
         BufferData IBData;
         IBData.pData = Indices;
         IBData.DataSize = sizeof(Indices);
-        pDevice->CreateBuffer(IndBuffDesc, IBData, &m_CubeIndexBuffer);
+        pDevice->CreateBuffer(IndBuffDesc, &IBData, &m_CubeIndexBuffer);
     }
 }
 
@@ -155,7 +155,7 @@ void SamplePlugin::Render(Diligent::IDeviceContext *pContext, const float4x4 &Vi
 {
     {
         MapHelper<float4x4> CBConstants(pContext, m_VSConstants, MAP_WRITE, MAP_FLAG_DISCARD);
-        *CBConstants = transposeMatrix(ViewProjMatrix);
+        *CBConstants = ViewProjMatrix.Transpose();
     }
 
     Uint32 offset = 0;
@@ -166,6 +166,6 @@ void SamplePlugin::Render(Diligent::IDeviceContext *pContext, const float4x4 &Vi
     pContext->SetPipelineState(m_PSO);
     pContext->CommitShaderResources(m_SRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-    DrawAttribs DrawAttrs(36, VT_UINT32, DRAW_FLAG_VERIFY_STATES);
+    DrawAttribs DrawAttrs(36, VT_UINT32, DRAW_FLAG_VERIFY_ALL);
     pContext->Draw(DrawAttrs);
 }

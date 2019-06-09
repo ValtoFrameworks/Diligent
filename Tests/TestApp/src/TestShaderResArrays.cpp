@@ -27,7 +27,6 @@
 #include "pch.h"
 #include "TestShaderResArrays.h"
 #include "GraphicsUtilities.h"
-#include "BasicShaderSourceStreamFactory.h"
 #include "TestTexturing.h"
 
 using namespace Diligent;
@@ -38,9 +37,10 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
     m_pRenderDevice = pDevice;
     m_pDeviceContext = pDeviceContext;
     
-    ShaderCreationAttribs CreationAttrs;
-    BasicShaderSourceStreamFactory BasicSSSFactory;
-    CreationAttrs.pShaderSourceStreamFactory = &BasicSSSFactory;
+    ShaderCreateInfo CreationAttrs;
+    RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
+    pDevice->GetEngineFactory()->CreateDefaultShaderSourceStreamFactory(nullptr, &pShaderSourceFactory);
+    CreationAttrs.pShaderSourceStreamFactory = pShaderSourceFactory;
     CreationAttrs.Desc.TargetProfile = SHADER_PROFILE_DX_5_0;
     CreationAttrs.UseCombinedTextureSamplers = true;
 
@@ -56,29 +56,28 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
     {
         CreationAttrs.Desc.Name = "TestShaderResArrays: PS";
         CreationAttrs.FilePath = "Shaders\\ShaderResArrayTest.psh";
-        
-        StaticSamplerDesc StaticSampler;
-        StaticSampler.Desc.MinFilter = FILTER_TYPE_LINEAR;
-        StaticSampler.Desc.MagFilter = FILTER_TYPE_LINEAR;
-        StaticSampler.Desc.MipFilter = FILTER_TYPE_LINEAR;
-        StaticSampler.SamplerOrTextureName = "g_tex2DTest";
-        CreationAttrs.Desc.NumStaticSamplers = 1;
-        CreationAttrs.Desc.StaticSamplers = &StaticSampler;
         CreationAttrs.Desc.ShaderType =  SHADER_TYPE_PIXEL;
         CreationAttrs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-        ShaderVariableDesc Vars[] = 
-        {
-            {"g_tex2DTest", SHADER_VARIABLE_TYPE_MUTABLE},
-            {"g_tex2DTest2", SHADER_VARIABLE_TYPE_STATIC},
-            {"g_tex2D", SHADER_VARIABLE_TYPE_DYNAMIC}
-        };
-        CreationAttrs.Desc.VariableDesc = Vars;
-        CreationAttrs.Desc.NumVariables = _countof(Vars);
-
         m_pRenderDevice->CreateShader( CreationAttrs, &pPS );
     }
 
     PipelineStateDesc PSODesc;
+    StaticSamplerDesc StaticSampler;
+    StaticSampler.Desc.MinFilter = FILTER_TYPE_LINEAR;
+    StaticSampler.Desc.MagFilter = FILTER_TYPE_LINEAR;
+    StaticSampler.Desc.MipFilter = FILTER_TYPE_LINEAR;
+    StaticSampler.ShaderStages  = SHADER_TYPE_PIXEL;
+    StaticSampler.SamplerOrTextureName = "g_tex2DTest";
+    PSODesc.ResourceLayout.NumStaticSamplers = 1;
+    PSODesc.ResourceLayout.StaticSamplers = &StaticSampler;
+    ShaderResourceVariableDesc Vars[] = 
+    {
+        {SHADER_TYPE_PIXEL, "g_tex2DTest", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE},
+        {SHADER_TYPE_PIXEL, "g_tex2DTest2", SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
+        {SHADER_TYPE_PIXEL, "g_tex2D", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC}
+    };
+    PSODesc.ResourceLayout.Variables = Vars;
+    PSODesc.ResourceLayout.NumVariables = _countof(Vars);
     PSODesc.GraphicsPipeline.DepthStencilDesc.DepthEnable = False;
     PSODesc.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_NONE;
     PSODesc.GraphicsPipeline.BlendDesc.IndependentBlendEnable = False;
@@ -92,8 +91,8 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
     PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     LayoutElement Elems[] =
     {
-        LayoutElement( 0, 0, 3, Diligent::VT_FLOAT32, false, 0 ),
-        LayoutElement( 1, 0, 2, Diligent::VT_FLOAT32, false, sizeof( float ) * 3 )
+        LayoutElement{ 0, 0, 3, Diligent::VT_FLOAT32, false, 0 },
+        LayoutElement{ 1, 0, 2, Diligent::VT_FLOAT32, false, sizeof( float ) * 3 }
     };
     PSODesc.GraphicsPipeline.InputLayout.LayoutElements = Elems;
     PSODesc.GraphicsPipeline.InputLayout.NumElements = _countof( Elems );
@@ -121,7 +120,7 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
         Diligent::BufferData BuffData;
         BuffData.pData = Vertices;
         BuffData.DataSize = BuffDesc.uiSizeInBytes;
-        m_pRenderDevice->CreateBuffer(BuffDesc, BuffData, &m_pVertexBuff);
+        m_pRenderDevice->CreateBuffer(BuffDesc, &BuffData, &m_pVertexBuff);
     }
 
     RefCntAutoPtr<ISampler> pSampler;
@@ -147,7 +146,7 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
         TexData.pSubResources = SubResouces.data();
         TexData.NumSubresources = (Uint32)SubResouces.size();
 
-        m_pRenderDevice->CreateTexture( TexDesc, TexData, &m_pTextures[t] );
+        m_pRenderDevice->CreateTexture( TexDesc, &TexData, &m_pTextures[t] );
         m_pTextures[t]->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE)->SetSampler(pSampler);
     }
 
@@ -168,20 +167,20 @@ TestShaderResArrays::TestShaderResArrays(IRenderDevice *pDevice, IDeviceContext 
 
     //pVS->BindResources(m_pResourceMapping, 0);
     IDeviceObject *ppSRVs[] = {m_pTextures[3]->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE)};
-    pPS->BindResources(pResMapping, BIND_SHADER_RESOURCES_KEEP_EXISTING);
-    pPS->GetShaderVariable("g_tex2DTest2")->SetArray( ppSRVs, 1, 1);
+    m_pPSO->BindStaticResources(SHADER_TYPE_VERTEX | SHADER_TYPE_PIXEL, pResMapping, BIND_SHADER_RESOURCES_KEEP_EXISTING);
+    m_pPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_tex2DTest2")->SetArray( ppSRVs, 1, 1);
 
     m_pSRB->InitializeStaticResources();
     m_pSRB->BindResources(SHADER_TYPE_PIXEL, pResMapping, BIND_SHADER_RESOURCES_KEEP_EXISTING | BIND_SHADER_RESOURCES_UPDATE_MUTABLE | BIND_SHADER_RESOURCES_UPDATE_DYNAMIC);
     ppSRVs[0] = m_pTextures[4]->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
-    m_pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_tex2DTest")->SetArray(ppSRVs, 3, 1);
+    m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_tex2DTest")->SetArray(ppSRVs, 3, 1);
 }
     
 void TestShaderResArrays::Draw()
 {
     m_pDeviceContext->SetPipelineState(m_pPSO);
     IDeviceObject *ppSRVs[] = {m_pTextures[7]->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE)};
-    m_pSRB->GetVariable(SHADER_TYPE_PIXEL, "g_tex2D")->SetArray(ppSRVs, 1, 1);
+    m_pSRB->GetVariableByName(SHADER_TYPE_PIXEL, "g_tex2D")->SetArray(ppSRVs, 1, 1);
 
     m_pDeviceContext->CommitShaderResources(m_pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     
@@ -190,7 +189,7 @@ void TestShaderResArrays::Draw()
     m_pDeviceContext->SetVertexBuffers( 0, 1, pBuffs, Offsets, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET );
 
     // Draw a quad
-    Diligent::DrawAttribs DrawAttrs(4, DRAW_FLAG_VERIFY_STATES);
+    Diligent::DrawAttribs DrawAttrs(4, DRAW_FLAG_VERIFY_ALL);
     m_pDeviceContext->Draw( DrawAttrs );
     
     SetStatus(TestResult::Succeeded);

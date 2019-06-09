@@ -41,6 +41,7 @@
 
 #include "RefCntAutoPtr.h"
 #include "DebugUtilities.h"
+#include "EngineFactory.h"
 #include "RenderDevice.h"
 #include "DeviceContext.h"
 #include "SwapChain.h"

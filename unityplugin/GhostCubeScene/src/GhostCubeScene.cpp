@@ -25,7 +25,6 @@
 #include "PlatformDefinitions.h"
 #include "BasicMath.h"
 #include <algorithm>
-#include "BasicShaderSourceStreamFactory.h"
 #include "GraphicsUtilities.h"
 #include "MapHelper.h"
 #include "CommonlyUsedStates.h"
@@ -69,13 +68,13 @@ void GhostCubeScene::OnGraphicsInitialized()
     TexDesc.ClearValue.Color[1] = 0.2f;
     TexDesc.ClearValue.Color[2] = 0.5f;
     TexDesc.ClearValue.Color[3] = 1.0f;
-    pDevice->CreateTexture(TexDesc, TextureData(), &m_pRenderTarget);
+    pDevice->CreateTexture(TexDesc, nullptr, &m_pRenderTarget);
 
     TexDesc.Name = "Mirror depth buffer";
     TexDesc.Format = TEX_FORMAT_D32_FLOAT;
     TexDesc.BindFlags = BIND_DEPTH_STENCIL | BIND_SHADER_RESOURCE;
     TexDesc.ClearValue.DepthStencil.Depth = 0.f;
-    pDevice->CreateTexture(TexDesc, TextureData(), &m_pDepthBuffer);
+    pDevice->CreateTexture(TexDesc, nullptr, &m_pDepthBuffer);
 
     //auto deviceType = pDevice->GetDeviceCaps().DevType;
     {
@@ -87,51 +86,53 @@ void GhostCubeScene::OnGraphicsInitialized()
         PSODesc.Name = "Mirror PSO";
         PSODesc.GraphicsPipeline.NumRenderTargets = 1;
 
-        PSODesc.GraphicsPipeline.RTVFormats[0] = SCDesc.ColorBufferFormat == TEX_FORMAT_RGBA8_UNORM ? TEX_FORMAT_RGBA8_UNORM_SRGB : SCDesc.ColorBufferFormat;
+        PSODesc.GraphicsPipeline.RTVFormats[0] = SCDesc.ColorBufferFormat;
         PSODesc.GraphicsPipeline.DSVFormat = SCDesc.DepthBufferFormat;
         PSODesc.GraphicsPipeline.PrimitiveTopology = PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
         PSODesc.GraphicsPipeline.RasterizerDesc.CullMode = CULL_MODE_BACK;
         PSODesc.GraphicsPipeline.DepthStencilDesc.DepthFunc = UseReverseZ ? COMPARISON_FUNC_GREATER_EQUAL : COMPARISON_FUNC_LESS_EQUAL;
 
-        ShaderCreationAttribs CreationAttribs;
-        BasicShaderSourceStreamFactory BasicSSSFactory("shaders");
-        CreationAttribs.pShaderSourceStreamFactory = &BasicSSSFactory;
-        CreationAttribs.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
-        CreationAttribs.Desc.DefaultVariableType = SHADER_VARIABLE_TYPE_STATIC;
-        CreationAttribs.UseCombinedTextureSamplers = true;
+        ShaderCreateInfo ShaderCI;
+        RefCntAutoPtr<IShaderSourceInputStreamFactory> pShaderSourceFactory;
+        pDevice->GetEngineFactory()->CreateDefaultShaderSourceStreamFactory("shaders", &pShaderSourceFactory);
+        ShaderCI.pShaderSourceStreamFactory = pShaderSourceFactory;
+        ShaderCI.SourceLanguage = SHADER_SOURCE_LANGUAGE_HLSL;
+        ShaderCI.UseCombinedTextureSamplers = true;
 
         CreateUniformBuffer(pDevice, sizeof(float4x4), "Mirror VS constants CB", &m_pMirrorVSConstants);
 
         RefCntAutoPtr<IShader> pVS;
         {
-            CreationAttribs.Desc.ShaderType = SHADER_TYPE_VERTEX;
-            CreationAttribs.EntryPoint = "main";
-            CreationAttribs.Desc.Name = "Mirror VS";
-            CreationAttribs.FilePath = "Mirror.vsh";
-            pDevice->CreateShader(CreationAttribs, &pVS);
-            pVS->GetShaderVariable("Constants")->Set(m_pMirrorVSConstants);
+            ShaderCI.Desc.ShaderType = SHADER_TYPE_VERTEX;
+            ShaderCI.EntryPoint = "main";
+            ShaderCI.Desc.Name = "Mirror VS";
+            ShaderCI.FilePath = "Mirror.vsh";
+            pDevice->CreateShader(ShaderCI, &pVS);
         }
 
         
         RefCntAutoPtr<IShader> pPS;
         {
-            CreationAttribs.Desc.ShaderType = SHADER_TYPE_PIXEL;
-            CreationAttribs.EntryPoint = "main";
-            CreationAttribs.Desc.Name = "Mirror PS";
-            CreationAttribs.FilePath = "Mirror.psh";
-            StaticSamplerDesc StaticSamplers[] =
-            {
-                {"g_tex2Reflection", Sam_Aniso4xClamp}
-            };
-            CreationAttribs.Desc.StaticSamplers = StaticSamplers;
-            CreationAttribs.Desc.NumStaticSamplers = _countof(StaticSamplers);
-            pDevice->CreateShader(CreationAttribs, &pPS);
-            pPS->GetShaderVariable("g_tex2Reflection")->Set(m_pRenderTarget->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+            ShaderCI.Desc.ShaderType = SHADER_TYPE_PIXEL;
+            ShaderCI.EntryPoint = "main";
+            ShaderCI.Desc.Name = "Mirror PS";
+            ShaderCI.FilePath = "Mirror.psh";
+            pDevice->CreateShader(ShaderCI, &pPS);
         }
+
+        PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+        StaticSamplerDesc StaticSamplers[] =
+        {
+            {SHADER_TYPE_PIXEL, "g_tex2Reflection", Sam_Aniso4xClamp}
+        };
+        PSODesc.ResourceLayout.StaticSamplers    = StaticSamplers;
+        PSODesc.ResourceLayout.NumStaticSamplers = _countof(StaticSamplers);
 
         PSODesc.GraphicsPipeline.pVS = pVS;
         PSODesc.GraphicsPipeline.pPS = pPS;
         pDevice->CreatePipelineState(PSODesc, &m_pMirrorPSO);
+        m_pMirrorPSO->GetStaticVariableByName(SHADER_TYPE_VERTEX, "Constants")->Set(m_pMirrorVSConstants);
+        m_pMirrorPSO->GetStaticVariableByName(SHADER_TYPE_PIXEL, "g_tex2Reflection")->Set(m_pRenderTarget->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
         m_pMirrorPSO->CreateShaderResourceBinding(&m_pMirrorSRB, true);
     }
 #if D3D12_SUPPORTED
@@ -141,7 +142,7 @@ void GhostCubeScene::OnGraphicsInitialized()
 
 void GhostCubeScene::Update(double CurrTime, double ElapsedTime)
 {
-    m_CubeWorldView = scaleMatrix(1, 2, 1) * rotationY(-static_cast<float>(CurrTime) * 2.0f) * rotationX(-PI_F * 0.3f) * translationMatrix(0.f, 0.0f, 10.0f);
+    m_CubeWorldView = float4x4::Scale(1, 2, 1) * float4x4::RotationY(static_cast<float>(CurrTime) * 2.0f) * float4x4::RotationX(PI_F * 0.3f) * float4x4::Translation(0.f, 0.0f, 10.0f);
 }
 
 
@@ -177,13 +178,13 @@ void GhostCubeScene::Render(UnityRenderingEvent RenderEventFunc)
         if (ReverseZ)
             std::swap(NearPlane, FarPlane);
         float aspectRatio = 1.0f;
-        float4x4 ReflectionCameraProj = Projection(PI_F / 4.f, aspectRatio, NearPlane, FarPlane, bIsGL);
+        float4x4 ReflectionCameraProj = float4x4::Projection(PI_F / 4.f, aspectRatio, NearPlane, FarPlane, bIsGL);
         auto wvp = m_CubeWorldView * ReflectionCameraProj;
         float fReverseZ = bIsGL ? +1.f : -1.f;
-        SetMatrixFromUnity(wvp._m00, fReverseZ * wvp._m01, wvp._m02, wvp._m03, 
-                           wvp._m10, fReverseZ * wvp._m11, wvp._m12, wvp._m13,
-                           wvp._m20, fReverseZ * wvp._m21, wvp._m22, wvp._m23,
-                           wvp._m30, fReverseZ * wvp._m31, wvp._m32, wvp._m33);
+        SetMatrixFromUnity(wvp.m00, fReverseZ * wvp.m01, wvp.m02, wvp.m03, 
+                           wvp.m10, fReverseZ * wvp.m11, wvp.m12, wvp.m13,
+                           wvp.m20, fReverseZ * wvp.m21, wvp.m22, wvp.m23,
+                           wvp.m30, fReverseZ * wvp.m31, wvp.m32, wvp.m33);
 
         SetTexturesFromUnity(m_pRenderTarget->GetNativeHandle(), m_pDepthBuffer->GetNativeHandle());
 
@@ -198,18 +199,18 @@ void GhostCubeScene::Render(UnityRenderingEvent RenderEventFunc)
     pCtx->CommitShaderResources(m_pMirrorSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
     {
-        float4x4 MirrorWorldView = scaleMatrix(5,5,5) * rotationX(PI_F*0.6f) * translationMatrix(0.f, -3.0f, 10.0f);
+        float4x4 MirrorWorldView = float4x4::Scale(5,5,5) * float4x4::RotationX(-PI_F*0.6f) * float4x4::Translation(0.f, -3.0f, 10.0f);
         float NearPlane = 0.3f;
         float FarPlane = 1000.f;
         if (ReverseZ)
             std::swap(NearPlane, FarPlane);
         float AspectRatio = static_cast<float>(m_WindowWidth) / static_cast<float>(std::max(m_WindowHeight, 1));
-        float4x4 MainCameraProj = Projection(PI_F / 3.f, AspectRatio, NearPlane, FarPlane, bIsGL);
+        float4x4 MainCameraProj = float4x4::Projection(PI_F / 3.f, AspectRatio, NearPlane, FarPlane, bIsGL);
         auto wvp = MirrorWorldView * MainCameraProj;
         MapHelper<float4x4> CBConstants(pCtx, m_pMirrorVSConstants, MAP_WRITE, MAP_FLAG_DISCARD);
-        *CBConstants = transposeMatrix(wvp);
+        *CBConstants = wvp.Transpose();
     }
 
-    DrawAttribs DrawAttrs(4, DRAW_FLAG_VERIFY_STATES);
+    DrawAttribs DrawAttrs(4, DRAW_FLAG_VERIFY_ALL);
     pCtx->Draw(DrawAttrs);
 }
